@@ -1,6 +1,6 @@
 # Argus Quant Engine
 
-> **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed user-defined rules, and a cloud-native deployment on AWS.**
+> **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed Python rules, a quant research lab, and a cloud-native deployment on AWS.**
 
 > [!NOTE]
 > 🚧 **Status: design phase.** This README describes the target architecture. See the [Roadmap](#-roadmap) for what is built so far.
@@ -15,7 +15,7 @@ The project focuses on three engineering topics:
 
 1. **Low-latency design on the JVM:** single-threaded agents, zero-allocation hot paths, binary encoding (SBE) and shared-memory messaging (Aeron IPC).
 2. **Hexagonal architecture:** pure domain models with no framework dependencies, with the architecture rules enforced by tests.
-3. **Safe execution of user code:** custom indicators written by users run **inside the engine process**, isolated with the GraalVM Polyglot sandbox.
+3. **Safe execution of user code:** trading rules are written by users in **Python** and run **inside the engine process** with GraalPy, isolated by the GraalVM Polyglot sandbox. Heavier research and model calibration happen offline in a separate Python lab with pandas and NumPy.
 
 The whole platform runs locally with Docker Compose and is deployed **end-to-end on AWS** with Terraform.
 
@@ -53,11 +53,9 @@ flowchart LR
 
     subgraph SE["argus-signal-engine"]
         direction TB
-        IND["Indicators & sliding windows<br/>(zero-allocation)"]
-        SBX["Script sandbox<br/>(GraalVM Polyglot, in-process)"]
-        RUL["Rule evaluator"]
+        IND["Built-in indicators & windows<br/>(Java, zero-allocation)"]
+        RUL["Python rules<br/>(GraalPy sandbox, in-process)"]
         IND --> RUL
-        SBX --> RUL
     end
 
     SE -->|"Aeron UDP · SBE"| STR["argus-strategy-sim<br/>(paper trading)"]
@@ -66,11 +64,14 @@ flowchart LR
     K --> DSP["argus-action-dispatcher"]
     DSP --> EXT["Webhooks / Email"]
     K --> ARC["argus-market-archiver"]
-    ARC --> TS[("TimescaleDB")]
+    ARC --> QDB[("QuestDB<br/>(market data)")]
 
     K -->|"signals, alerts, bars"| API["argus-api<br/>(BFF)"]
-    TS --> API
+    QDB --> API
+    API <--> PG[("PostgreSQL<br/>(rules)")]
     API -->|"rule changes"| K
+    QDB --> LAB["argus-quant-lab<br/>(Jupyter · pandas · NumPy)"]
+    LAB -->|"calibrated parameters"| K
     API <-->|"REST + WebSocket"| UI["argus-ui<br/>(Angular)"]
     USR(("Quant")) --> UI
 ```
@@ -81,14 +82,15 @@ flowchart LR
 
 | Component | Type | Tech | Responsibility |
 | :--- | :--- | :--- | :--- |
-| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades into SBE messages and publishes them over Aeron. Handles reconnection and sequence-gap detection. |
-| **`argus-signal-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Maintains sliding windows and candles, computes built-in indicators, runs user scripts in the embedded sandbox, and evaluates rules. Emits signals over Aeron and events to Kafka. |
-| **`argus-script-runtime`** | Library | GraalVM Polyglot (GraalJS) | Sandboxed execution of user-defined indicators, embedded in the signal engine. Applies isolation and resource limits, and manages the script lifecycle. |
+| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades into SBE messages and publishes them over Aeron. Handles reconnection and sequence-gap detection. A replay mode feeds Binance's public historical data instead, for reproducible tests and benchmarks. |
+| **`argus-signal-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Maintains sliding windows and candles, computes built-in indicators, and evaluates the users' Python rules in the embedded sandbox. Emits signals over Aeron and events to Kafka. |
+| **`argus-rule-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python rules, embedded in the signal engine. Provides the `argus` SDK (`@rule`, indicators, `argus.math`), applies isolation and resource limits, and manages the rule lifecycle. |
 | **`argus-strategy-sim`** | Service | Spring Boot, Aeron | Reference fast-path consumer. Subscribes to signals, simulates order fills and tracks a paper portfolio. It also records the signal-to-reaction latency. |
 | **`argus-action-dispatcher`** | Service | Spring Boot, Resilience4j | Consumes alert events and runs actions (webhooks, email) with retries, circuit breakers and a dead-letter topic. |
-| **`argus-market-archiver`** | Service | Spring Boot, Spring Kafka, JDBC | Persists ticks, candles, signals and alerts into TimescaleDB hypertables in batches. |
-| **`argus-api`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Rule and script management (CRUD + validation), historical queries, and live streaming of Kafka events to the UI. |
-| **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, signals and alerts, plus a rule and script editor. |
+| **`argus-market-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists trades, candles, signals and alerts into QuestDB time-partitioned tables, in batches. |
+| **`argus-api`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Rule management (CRUD, validation, versioning), historical queries, and live streaming of Kafka events to the UI. |
+| **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, signals and alerts, plus a Python rule editor. |
+| **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Publishes calibrated parameters for live rules to Kafka. |
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
 
 ---
@@ -102,22 +104,43 @@ flowchart LR
 - **Kafka is decoupled** through an Agrona ring buffer and a separate publisher agent (see above).
 - **GC:** Generational ZGC, so that the remaining pauses stay short.
 
-### Embedded script sandbox
+### Python rules
 
-User-defined indicators are written in **JavaScript** and run **in-process** through the GraalVM Polyglot API. There is no network hop and no serialisation on the evaluation path.
+Trading rules are plain **Python** functions. There is no custom rule language: users get the full expressiveness of Python, plus a small `argus` SDK.
 
-- **Isolation:** scripts run in a polyglot context with no host access, no I/O and no threads, configured through GraalVM's `SandboxPolicy`. The stronger policies (`ISOLATED`, `UNTRUSTED`) run scripts in a separate isolate heap and require Oracle GraalVM, which is free to use under the GFTC licence.
+```python
+from argus import rule, Signal
+
+@rule(symbols=["BTCUSDT"], timeframe="1m", actions=["webhook:telegram"],
+      params={"rsi_threshold": 30})
+def oversold_in_uptrend(ctx, params):
+    # ctx.rsi() and ctx.sma() are computed in Java on the fast path;
+    # the Python rule only combines them and decides.
+    if ctx.rsi(14) < params.rsi_threshold and ctx.close > ctx.sma(200):
+        return Signal.long(strength=0.8)
+```
+
+- **`@rule` metadata** (symbols, timeframe, actions, parameters) is read when the rule is loaded. The engine uses it to know which indicators to maintain, and the UI uses it to display the rule.
+- **Built-in indicators** (SMA, EMA, RSI, ATR, VWAP, Bollinger bands…) are implemented in Java and exposed to Python as read-only views, so the expensive work stays on the zero-allocation path.
+- **Incremental maths in pure Python** (z-scores, rolling regressions, Kalman filters, GARCH updates…) runs well: GraalPy JIT-compiles pure Python code.
+- **`argus.math`:** vetted numerical functions (for example linear algebra and statistics) implemented in Java and explicitly exposed to the sandbox. This replaces NumPy, which cannot run inside the sandbox.
+- **Model calibration** (fitting a GARCH, training a model, optimising parameters) belongs in [`argus-quant-lab`](#-components). The lab publishes the calibrated `params`, and the live rule only applies them.
+
+### Embedded sandbox (GraalPy)
+
+Rules run **in-process** through the GraalVM Polyglot API, with GraalPy as the Python runtime. There is no network hop and no serialisation on the evaluation path.
+
+- **Isolation:** rules run in a polyglot context with no host access beyond the `argus` SDK, no I/O, no threads and **no native code**, configured through GraalVM's `SandboxPolicy`. The stronger policies (`ISOLATED`, `UNTRUSTED`) run code in a separate isolate heap and need the language's isolate artifact (`python-isolate`). The exact policy supported by GraalPy is validated with a proof of concept at the start of Phase 3.
 - **Resource limits:** per-evaluation limits on statements, CPU time and heap.
-- **Fault containment:** scripts run on their own evaluator agent, so a slow script cannot stall the built-in indicators. If a script fails repeatedly or exceeds its budget, its rule is disabled (circuit breaker) and an alert is raised. The engine keeps running.
-- **Two tiers:** built-in indicators (SMA, EMA, RSI, VWAP, Bollinger bands…) are plain Java and run on the fast path. Scripts trade a little latency for flexibility.
+- **Warm-up:** GraalPy needs to warm up before its JIT kicks in. New or updated rules are first run against recent historical data (replay) and only activated once warmed up.
+- **Fault containment:** rules run on their own evaluator agent, so a slow rule cannot stall the built-in indicators. If a rule fails repeatedly or exceeds its budget, it is disabled (circuit breaker) and an alert is raised. The engine keeps running.
+- **Why not pandas or NumPy here:** they are C extensions, so they cannot run under a sandbox that forbids native code. pandas is also designed for batch processing, not for per-trade updates.
 
-### Rules
+### Rule lifecycle
 
-Rules are declarative JSON definitions that combine indicators, scripts, thresholds and actions. A rule follows this lifecycle:
-
-1. It is created and validated through `argus-api` and stored in PostgreSQL (the same TimescaleDB instance, in regular tables).
-2. It is published to the **compacted** Kafka topic `argus.rules.v1`.
-3. The signal engine consumes that topic and swaps in an immutable rule set **outside the hot path**. On restart, it rebuilds its full rule state from the compacted topic.
+1. A rule is created and validated through `argus-api` (syntax check, `@rule` metadata, a dry run in the sandbox) and stored, versioned, in PostgreSQL.
+2. It is published to the **compacted** Kafka topic `argus.rules.v1`. Calibrated parameters from the quant lab arrive through `argus.rule-params.v1`.
+3. The signal engine consumes both topics, warms up the new version, and swaps in an immutable rule set **outside the hot path**. On restart, it rebuilds its full state from the compacted topics.
 
 ### Where Spring is (and is not) used
 
@@ -153,7 +176,8 @@ com.argus.<service>
 | `argus.market.candles.v1` | Kafka | Protobuf | 1s / 1m candles |
 | `argus.signals.v1` | Kafka | Protobuf | Signals emitted by rules |
 | `argus.alerts.v1` | Kafka | Protobuf | Alerts that trigger actions |
-| `argus.rules.v1` | Kafka (compacted) | Protobuf | Current rule and script definitions |
+| `argus.rules.v1` | Kafka (compacted) | Protobuf | Current Python rule definitions (source + metadata) |
+| `argus.rule-params.v1` | Kafka (compacted) | Protobuf | Calibrated rule parameters from the quant lab |
 | `argus.alerts.dlq.v1` | Kafka | Protobuf | Actions that failed after retries |
 
 ---
@@ -166,8 +190,11 @@ com.argus.<service>
 | **Framework** | Spring Boot 4 | — |
 | **Fast-path messaging** | Aeron + Agrona + SBE, Media Driver sidecar, shared IPC namespace in Docker | ECS on EC2 with `ipcMode: task` (IPC is not available on Fargate). UDP unicast between hosts, because VPCs do not support multicast |
 | **Event streaming** | Apache Kafka (KRaft) | Amazon MSK (managed Apache Kafka, same client APIs) |
-| **Schema registry** | Apicurio Registry | AWS Glue Schema Registry |
-| **Time-series storage** | TimescaleDB | TimescaleDB self-managed on EC2 + EBS (RDS and Aurora do not support the TimescaleDB extension) |
+| **Schema registry** | Apicurio Registry | Apicurio Registry on Fargate (same serializers in every environment) |
+| **Time-series storage** | QuestDB | QuestDB self-managed on EC2 + EBS |
+| **Relational storage** (rules) | PostgreSQL | Amazon RDS for PostgreSQL |
+| **User rules** | GraalPy (GraalVM Polyglot), running on Oracle GraalVM 25 | Same image as the signal engine |
+| **Research** | Python (CPython), JupyterLab, pandas, NumPy, SciPy | Runs locally; not deployed in the first AWS iteration |
 | **Authentication** | Keycloak (OIDC) | Amazon Cognito (OIDC) |
 | **Notifications** | Webhook mock server, MailHog | Amazon SES / outbound webhooks |
 | **Frontend hosting** | `ng serve` | Amazon S3 + CloudFront |
@@ -176,7 +203,7 @@ com.argus.<service>
 | **Infrastructure as code** | Docker Compose | Terraform |
 | **CI/CD** | GitHub Actions | GitHub Actions → ECR → ECS (OIDC role, no long-lived keys) |
 | **Build** | Maven multi-module build (Maven Wrapper) | — |
-| **Testing** | JUnit 5, Testcontainers, ArchUnit, JMH | — |
+| **Testing** | JUnit 6, Testcontainers, ArchUnit, JMH | — |
 
 ### AWS deployment overview
 
@@ -184,7 +211,8 @@ com.argus.<service>
 - **ECS cluster** with two capacity types:
   - **EC2 capacity provider** for the fast path: the feed gateway, the signal engine and a Media Driver sidecar run in the same task and share IPC.
   - **Fargate** for everything else.
-- **MSK** for Kafka, **EC2** for TimescaleDB, **Cognito** for authentication, **S3 + CloudFront** for the UI.
+- **MSK** for Kafka, **EC2** for QuestDB, **RDS** for PostgreSQL, **Cognito** for authentication, **S3 + CloudFront** for the UI.
+- **Region:** an EU region (for example `eu-west-1` or `eu-south-2`). Binance blocks access from some countries, including the US, so a US region would cut off the market feed.
 - **Cost:** MSK and the EC2 instances are billed while they run, so the environment is meant to be created with `terraform apply` and destroyed with `terraform destroy` after each session.
 
 ---
@@ -195,9 +223,9 @@ These are **targets, not measured results.** They will be replaced by real numbe
 
 | Measurement | Scope | Target (p99) |
 | :--- | :--- | :--- |
-| Trade decoded → signal emitted | Inside `argus-signal-engine`, built-in indicators | < 50 µs |
 | Feed gateway → signal engine | Aeron IPC, same host | < 20 µs |
-| Script evaluation | GraalJS, warmed up, simple indicator | < 500 µs |
+| Trade decoded → built-in indicators updated | Inside `argus-signal-engine`, Java only | < 50 µs |
+| Trade decoded → signal emitted | Inside `argus-signal-engine`, simple Python rule, warmed up, sandboxed | < 500 µs |
 | Engine → strategy simulator | Aeron UDP, same AZ | < 500 µs |
 
 Cloud VMs have more jitter than dedicated hardware. Results are reported together with the environment they were measured on.
@@ -210,7 +238,7 @@ Cloud VMs have more jitter than dedicated hardware. Results are reported togethe
 argus-quant-engine/
 ├── contracts/            # argus-contracts: SBE + Protobuf schemas
 ├── libs/
-│   └── script-runtime/   # argus-script-runtime
+│   └── rule-runtime/     # argus-rule-runtime (+ the argus Python SDK)
 ├── services/
 │   ├── feed-gateway/
 │   ├── signal-engine/
@@ -219,6 +247,7 @@ argus-quant-engine/
 │   ├── market-archiver/
 │   └── api/
 ├── ui/                   # argus-ui (Angular)
+├── quant-lab/            # argus-quant-lab (Python, Jupyter notebooks)
 ├── benchmarks/           # JMH + latency harnesses
 ├── infra/
 │   ├── docker/           # docker-compose for local development
@@ -231,14 +260,17 @@ argus-quant-engine/
 
 ## 🗺️ Roadmap
 
-- [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, TimescaleDB, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
-- [ ] **Phase 1: Vertical slice.** Feed gateway → signal engine (candles + SMA/EMA) → Kafka → archiver → TimescaleDB.
-- [ ] **Phase 2: Rules & alerts.** Rule model, compacted rules topic, action dispatcher with Resilience4j.
-- [ ] **Phase 3: Script sandbox.** `argus-script-runtime` with GraalJS, resource limits and a circuit breaker.
-- [ ] **Phase 4: API & UI.** `argus-api` (REST, WebSocket, OIDC) and the Angular dashboard.
-- [ ] **Phase 5: Fast-path consumer & benchmarking.** `argus-strategy-sim`, JMH and HdrHistogram harnesses, real latency numbers in this README.
-- [ ] **Phase 6: AWS.** Terraform modules, ECS (EC2 + Fargate), MSK, Cognito, CloudFront, CD pipeline.
-- [ ] **Phase 7: Observability.** End-to-end tracing, dashboards, SLO-based alerting.
+- [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
+- [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
+- [ ] **Phase 2: Vertical slice.** Feed gateway → signal engine (candles + SMA/EMA) → Kafka → archiver → QuestDB.
+- [ ] **Phase 3: Python rules & alerts.** GraalPy proof of concept, `argus-rule-runtime` and the `argus` SDK, sandbox limits and circuit breaker, compacted rules topic, action dispatcher with Resilience4j.
+- [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live rules.
+- [ ] **Phase 5: API & UI.** `argus-api` (REST, WebSocket, OIDC) and the Angular dashboard.
+- [ ] **Phase 6: Fast-path consumer & benchmarking.** `argus-strategy-sim`, JMH and HdrHistogram harnesses, real latency numbers in this README.
+- [ ] **Phase 7: AWS.** Terraform modules, ECS (EC2 + Fargate), MSK, Cognito, CloudFront, CD pipeline.
+- [ ] **Phase 8: Observability.** End-to-end tracing, dashboards, SLO-based alerting.
+
+Each phase, with its scope and completion criteria, is described in [`docs/roadmap.md`](docs/roadmap.md).
 
 Key design decisions are recorded as ADRs in [`docs/adr`](docs/adr).
 
