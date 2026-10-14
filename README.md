@@ -258,6 +258,25 @@ argus-quant-engine/
 
 ---
 
+## 🔨 Building
+
+**Prerequisites:** JDK 25 ([Eclipse Temurin](https://adoptium.net/) recommended) with `JAVA_HOME` pointing to it. Maven itself is not required: the Maven Wrapper downloads the right version on first use.
+
+```bash
+./mvnw verify            # compile, test and check formatting
+./mvnw spotless:apply    # format the code (google-java-format)
+```
+
+On Windows, use `mvnw.cmd` instead of `./mvnw`.
+
+Notes on the build:
+
+- **One parent POM.** Every dependency and plugin version is declared in the root [`pom.xml`](pom.xml). Modules declare dependencies without a version.
+- **Toolchain checks.** The Maven Enforcer plugin fails the build with a clear message on Java older than 25 or Maven older than 3.9.
+- **Formatting is enforced.** `verify` runs `spotless:check` and fails on unformatted code; run `spotless:apply` to fix it.
+
+---
+
 ## 🗺️ Roadmap
 
 - [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
