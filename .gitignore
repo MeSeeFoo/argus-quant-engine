@@ -34,3 +34,6 @@ target/
 .classpath
 .project
 .settings/
+
+# Local environment settings (copy of infra/docker/.env.example)
+.env
