@@ -1,0 +1,53 @@
+// Topic argus.market.candles.v1: OHLCV candles built by the signal engine from trades.
+//
+// Same conventions as the fast-path SBE messages: decimals as int64 mantissas with scale 10⁻⁸,
+// timestamps in epoch nanoseconds, venue and symbol as text. Evolution rules: see contracts/README.md.
+syntax = "proto3";
+
+package argus.market.candles.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "CandleProto";
+option java_package = "com.argus.contracts.proto.market.candles.v1";
+
+// Price and volume summary of one instrument over one closed interval.
+//
+// A candle is published once, when its interval closes, and is never updated. An interval with no
+// trades produces no candle.
+//
+// Kafka key: "VENUE:SYMBOL" (e.g. "BINANCE:BTCUSDT").
+message Candle {
+  // Uppercase venue code, at most 12 US-ASCII characters (e.g. "BINANCE").
+  string venue = 1;
+  // Symbol as the venue names it, uppercase, no separator, at most 24 US-ASCII characters (e.g. "BTCUSDT").
+  string symbol = 2;
+  // Length of the interval.
+  Interval interval = 3;
+  // Start of the interval (inclusive), nanoseconds since the Unix epoch (UTC), aligned to the
+  // interval. The interval ends (exclusive) at open_timestamp + interval length.
+  int64 open_timestamp = 4;
+  // Decimal64 mantissa: price of the first trade in the interval, value = open × 10⁻⁸.
+  int64 open = 5;
+  // Decimal64 mantissa: highest trade price, value = high × 10⁻⁸.
+  int64 high = 6;
+  // Decimal64 mantissa: lowest trade price, value = low × 10⁻⁸.
+  int64 low = 7;
+  // Decimal64 mantissa: price of the last trade in the interval, value = close × 10⁻⁸.
+  int64 close = 8;
+  // Decimal64 mantissa: sum of trade quantities (base asset), value = volume × 10⁻⁸.
+  int64 volume = 9;
+  // Decimal64 mantissa: sum of price × quantity (quote asset), each product rounded to 10⁻⁸,
+  // value = quote_volume × 10⁻⁸.
+  int64 quote_volume = 10;
+  // Number of trades in the interval. Always at least 1.
+  uint64 trade_count = 11;
+  // Time the engine published the candle, nanoseconds since the Unix epoch (UTC).
+  int64 emit_timestamp = 12;
+}
+
+// Supported candle lengths. Values are added, never renumbered.
+enum Interval {
+  INTERVAL_UNSPECIFIED = 0;
+  INTERVAL_1S = 1;
+  INTERVAL_1M = 2;
+}
