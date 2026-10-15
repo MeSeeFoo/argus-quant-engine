@@ -173,7 +173,7 @@ com.argus.<service>
 | `aeron:ipc` stream 1001 | Aeron | SBE `Trade`, `BestBidAsk`, `Heartbeat` | Normalised market data from the feed gateway |
 | `aeron:udp` stream 2001 | Aeron | SBE `Signal`, `Heartbeat` | Signals for fast-path consumers |
 | `argus.market.trades.v1` | Kafka | Protobuf | Normalised trades (archive) |
-| `argus.market.candles.v1` | Kafka | Protobuf | 1s / 1m candles |
+| `argus.market.quotes.v1` | Kafka | Protobuf | Top of book (best bid / ask) |
 | `argus.signals.v1` | Kafka | Protobuf | Signals emitted by rules |
 | `argus.alerts.v1` | Kafka | Protobuf | Alerts that trigger actions |
 | `argus.rules.v1` | Kafka (compacted) | Protobuf | Current Python rule definitions (source + metadata) |

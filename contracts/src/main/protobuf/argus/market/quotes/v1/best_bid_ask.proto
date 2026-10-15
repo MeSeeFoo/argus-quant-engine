@@ -1,0 +1,38 @@
+// Topic argus.market.quotes.v1: top-of-book updates, archived by the market archiver.
+//
+// Mirrors the fast-path SBE BestBidAsk message: same fields, same field numbers (= SBE field ids),
+// same decimal scale. Evolution rules: see contracts/README.md.
+syntax = "proto3";
+
+package argus.market.quotes.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "BestBidAskProto";
+option java_package = "com.argus.contracts.proto.market.quotes.v1";
+
+// The current top of book: the best price someone is willing to buy at (bid) and sell at (ask),
+// with their quantities. It is intent, not execution; each update replaces the previous one.
+//
+// Kafka key: "VENUE:SYMBOL" (e.g. "BINANCE:BTCUSDT").
+message BestBidAsk {
+  // Gateway sequence, shared with Trade on the fast path. Starts at 1.
+  uint64 sequence = 1;
+  // Book version on the venue; updates not newer than the last one are dropped.
+  int64 book_update_id = 2;
+  // Decimal64 mantissa: best bid, value = bid_price × 10⁻⁸.
+  int64 bid_price = 3;
+  // Decimal64 mantissa: quantity at the best bid, value = bid_quantity × 10⁻⁸.
+  int64 bid_quantity = 4;
+  // Decimal64 mantissa: best ask, value = ask_price × 10⁻⁸.
+  int64 ask_price = 5;
+  // Decimal64 mantissa: quantity at the best ask, value = ask_quantity × 10⁻⁸.
+  int64 ask_quantity = 6;
+  // Event time on the venue, nanoseconds since the Unix epoch (UTC).
+  int64 exchange_timestamp = 7;
+  // Time the gateway received it, nanoseconds since the Unix epoch (UTC).
+  int64 receive_timestamp = 8;
+  // Uppercase venue code, at most 12 US-ASCII characters (e.g. "BINANCE").
+  string venue = 9;
+  // Symbol as the venue names it, uppercase, no separator, at most 24 US-ASCII characters (e.g. "BTCUSDT").
+  string symbol = 10;
+}

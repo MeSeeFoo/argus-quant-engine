@@ -2,12 +2,12 @@ package com.argus.contracts.proto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.argus.contracts.proto.market.candles.v1.Candle;
-import com.argus.contracts.proto.market.candles.v1.Interval;
+import com.argus.contracts.proto.market.quotes.v1.BestBidAsk;
 import com.argus.contracts.proto.market.trades.v1.Side;
 import com.argus.contracts.proto.market.trades.v1.Trade;
 import com.argus.contracts.proto.signals.v1.Direction;
 import com.argus.contracts.proto.signals.v1.Signal;
+import com.argus.contracts.sbe.BestBidAskEncoder;
 import com.argus.contracts.sbe.SignalEncoder;
 import com.argus.contracts.sbe.TradeEncoder;
 import com.google.protobuf.CodedOutputStream;
@@ -35,7 +35,7 @@ class SchemaTest {
   static Stream<Arguments> topics() {
     return Stream.of(
         Arguments.of("argus.market.trades.v1", Trade.getDescriptor()),
-        Arguments.of("argus.market.candles.v1", Candle.getDescriptor()),
+        Arguments.of("argus.market.quotes.v1", BestBidAsk.getDescriptor()),
         Arguments.of("argus.signals.v1", Signal.getDescriptor()));
   }
 
@@ -63,21 +63,19 @@ class SchemaTest {
   }
 
   @Test
-  void candleFieldsAreStable() {
+  void bestBidAskFieldsAreStable() {
     assertFields(
-        Candle.getDescriptor(),
-        "1 venue string",
-        "2 symbol string",
-        "3 interval enum",
-        "4 open_timestamp int64",
-        "5 open int64",
-        "6 high int64",
-        "7 low int64",
-        "8 close int64",
-        "9 volume int64",
-        "10 quote_volume int64",
-        "11 trade_count uint64",
-        "12 emit_timestamp int64");
+        BestBidAsk.getDescriptor(),
+        "1 sequence uint64",
+        "2 book_update_id int64",
+        "3 bid_price int64",
+        "4 bid_quantity int64",
+        "5 ask_price int64",
+        "6 ask_quantity int64",
+        "7 exchange_timestamp int64",
+        "8 receive_timestamp int64",
+        "9 venue string",
+        "10 symbol string");
   }
 
   @Test
@@ -101,8 +99,6 @@ class SchemaTest {
   void enumValuesAreStable() {
     assertValues(Side.getDescriptor(), "0 SIDE_UNSPECIFIED", "1 SIDE_BUY", "2 SIDE_SELL");
     assertValues(
-        Interval.getDescriptor(), "0 INTERVAL_UNSPECIFIED", "1 INTERVAL_1S", "2 INTERVAL_1M");
-    assertValues(
         Direction.getDescriptor(),
         "0 DIRECTION_UNSPECIFIED",
         "1 DIRECTION_LONG",
@@ -113,6 +109,7 @@ class SchemaTest {
   @Test
   void fieldNumbersMatchTheSbeFieldIds() throws ReflectiveOperationException {
     assertMatchesSbe(Trade.getDescriptor(), TradeEncoder.class);
+    assertMatchesSbe(BestBidAsk.getDescriptor(), BestBidAskEncoder.class);
     assertMatchesSbe(Signal.getDescriptor(), SignalEncoder.class);
   }
 

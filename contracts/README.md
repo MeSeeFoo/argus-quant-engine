@@ -23,7 +23,7 @@ These are **our own canonical contracts**, not the exchange's. The feed gateway 
 | 10 | `Signal` | A rule's conclusion: be LONG, SHORT or FLAT on an instrument, with a strength. A recommendation, not an order. It points to the market event that triggered it. | signal-engine → fast-path consumers |
 | 99 | `Heartbeat` | "Still alive" on an idle stream. Carries the last published sequence so receivers detect gaps even when nothing else arrives. | every fast-path stream |
 
-Volume is not a message of its own: a trade's `quantity` is its volume, and aggregated volume (candles, windows) is computed by the signal engine and published to Kafka.
+Volume is not a message of its own: a trade's `quantity` is its volume, and aggregated volume (candles, windows) is computed by the signal engine.
 
 ### Common types
 
@@ -129,7 +129,7 @@ Each topic is meant to be registered in Apicurio as its own artifact once the re
 
 ### Conventions
 
-- **One message per topic, one file per message.** The Protobuf package *is* the topic name, `v1` included: topic `argus.market.trades.v1` ↔ package `argus.market.trades.v1` ↔ file `argus/market/trades/v1/trade.proto`.
+- **One message per topic, one file per message.** The Protobuf package *is* the topic name, `v1` included: topic `argus.market.trades.v1` ↔ package `argus.market.trades.v1` ↔ file `argus/market/trades/v1/trade.proto`. File names are the message name in `lower_snake_case` (`best_bid_ask.proto`).
 - **Self-contained files.** No file imports another, so each topic registers in Apicurio without schema references. An enum lives next to the only message that uses it.
 - **Java package:** `com.argus.contracts.proto.` + the Protobuf package (`com.argus.contracts.proto.market.trades.v1`), with `java_multiple_files`: every message and enum is a top-level class.
 - **Names:** `lower_snake_case` fields, `PascalCase` messages and enums, enum values prefixed with the enum name (`SIDE_BUY`), and value `0` reserved for `*_UNSPECIFIED`.
@@ -149,17 +149,17 @@ A Kafka message carries the same values as its SBE counterpart: the publisher co
 
 Protobuf does not enforce the length limits: the strings come from SBE messages, where they are enforced. `google.protobuf.Timestamp` and decimal wrapper messages are avoided on purpose: they would need imports, cost bytes, and break the 1:1 mapping with SBE.
 
-`Trade` and `Signal` mirror their SBE messages field by field, and **their field numbers are the SBE field ids**. Enum values match SBE too, except `Direction.FLAT`: SBE uses `0` for it, but Protobuf reserves `0` for "not set", so it is `DIRECTION_FLAT = 3`.
+`Trade`, `BestBidAsk` and `Signal` mirror their SBE messages field by field, and **their field numbers are the SBE field ids**. Enum values match SBE too, except `Direction.FLAT`: SBE uses `0` for it, but Protobuf reserves `0` for "not set", so it is `DIRECTION_FLAT = 3`.
 
 ### Messages
 
 | Topic | Message | Meaning | Route |
 | :--- | :--- | :--- | :--- |
 | `argus.market.trades.v1` | `Trade` | Same as the SBE `Trade`: an execution on the venue, never corrected. | signal-engine → market-archiver |
-| `argus.market.candles.v1` | `Candle` | OHLCV summary of one instrument over one closed interval (1 s or 1 min). Published once, when the interval closes; an interval without trades produces no candle. | signal-engine → market-archiver, api |
+| `argus.market.quotes.v1` | `BestBidAsk` | Same as the SBE `BestBidAsk`: the top of book, intent rather than execution; each update replaces the previous one. | signal-engine → market-archiver |
 | `argus.signals.v1` | `Signal` | Same as the SBE `Signal`: a rule's recommendation, not an order. | signal-engine → market-archiver, api |
 
-`BestBidAsk` and `Heartbeat` stay on the fast path: the top of book is replaced on every update and is not archived, and Kafka has its own liveness mechanisms.
+`Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
 
 **`Trade`**
 
@@ -175,22 +175,20 @@ Protobuf does not enforce the length limits: the strings come from SBE messages,
 | 8 | `venue` | `string` | |
 | 9 | `symbol` | `string` | |
 
-**`Candle`**
+**`BestBidAsk`**
 
 | # | Field | Type | Meaning |
 | --: | :--- | :--- | :--- |
-| 1 | `venue` | `string` | |
-| 2 | `symbol` | `string` | |
-| 3 | `interval` | `Interval` | `INTERVAL_1S = 1`, `INTERVAL_1M = 2` |
-| 4 | `open_timestamp` | timestamp | Start of the interval (inclusive), aligned to it; the interval ends (exclusive) one length later |
-| 5 | `open` | decimal | First trade price |
-| 6 | `high` | decimal | Highest trade price |
-| 7 | `low` | decimal | Lowest trade price |
-| 8 | `close` | decimal | Last trade price |
-| 9 | `volume` | decimal | Sum of quantities (base asset) |
-| 10 | `quote_volume` | decimal | Sum of price × quantity (quote asset), each product rounded to 10⁻⁸ |
-| 11 | `trade_count` | `uint64` | Trades in the interval, at least 1 |
-| 12 | `emit_timestamp` | timestamp | Time the engine published the candle |
+| 1 | `sequence` | `uint64` | Gateway sequence, shared with `Trade` |
+| 2 | `book_update_id` | `int64` | Book version on the venue; updates not newer than the last one are dropped |
+| 3 | `bid_price` | decimal | Best bid |
+| 4 | `bid_quantity` | decimal | Quantity at the best bid |
+| 5 | `ask_price` | decimal | Best ask |
+| 6 | `ask_quantity` | decimal | Quantity at the best ask |
+| 7 | `exchange_timestamp` | timestamp | Event time on the venue |
+| 8 | `receive_timestamp` | timestamp | Time the gateway received it |
+| 9 | `venue` | `string` | |
+| 10 | `symbol` | `string` | |
 
 **`Signal`**
 
