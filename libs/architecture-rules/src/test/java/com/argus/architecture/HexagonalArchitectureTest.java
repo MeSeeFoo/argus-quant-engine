@@ -1,11 +1,8 @@
 package com.argus.architecture;
 
-import static com.argus.architecture.HexagonalArchitecture.APPLICATION_MUST_NOT_DEPEND_ON_ADAPTERS;
 import static com.argus.architecture.HexagonalArchitecture.DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS;
-import static com.argus.architecture.HexagonalArchitecture.DOMAIN_MUST_NOT_DEPEND_ON_OTHER_LAYERS;
-import static com.argus.architecture.HexagonalArchitecture.INBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_OUTBOUND_ADAPTERS;
-import static com.argus.architecture.HexagonalArchitecture.ONLY_CONFIG_MAY_DEPEND_ON_ADAPTERS;
-import static com.argus.architecture.HexagonalArchitecture.OUTBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_INBOUND_ADAPTERS;
+import static com.argus.architecture.HexagonalArchitecture.INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG;
+import static com.argus.architecture.HexagonalArchitecture.LAYERS_MUST_RESPECT_THE_HEXAGON;
 import static com.argus.architecture.HexagonalArchitecture.PACKAGES_MUST_BE_FREE_OF_CYCLES;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,30 +29,54 @@ class HexagonalArchitectureTest {
 
   private static final String FIXTURES = "com.argus.architecture.fixtures.";
 
+  /** Fixture package, the rules it violates, and the forbidden dependency the report must name. */
   static Stream<Arguments> fixtures() {
     return Stream.of(
-        arguments("compliant", Set.of()),
-        arguments("domainusesspring", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS)),
-        arguments("domainuseskafka", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS)),
-        arguments("domainusesaeron", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS)),
-        arguments("domainusesapplication", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_OTHER_LAYERS)),
+        arguments("compliant", Set.of(), ""),
+        arguments(
+            "domainusesspring",
+            Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS),
+            "org.springframework"),
+        arguments(
+            "domainuseskafka", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS), "org.apache.kafka"),
+        arguments("domainusesaeron", Set.of(DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS), "io.aeron"),
+        arguments(
+            "domainusesapplication",
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "application.PlaceOrder"),
         arguments(
             "domainusesadapter",
-            Set.of(DOMAIN_MUST_NOT_DEPEND_ON_OTHER_LAYERS, ONLY_CONFIG_MAY_DEPEND_ON_ADAPTERS)),
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "adapter.out.OrderRepository"),
         arguments(
             "applicationusesadapter",
-            Set.of(APPLICATION_MUST_NOT_DEPEND_ON_ADAPTERS, ONLY_CONFIG_MAY_DEPEND_ON_ADAPTERS)),
-        arguments("applicationusesconfig", Set.of(APPLICATION_MUST_NOT_DEPEND_ON_ADAPTERS)),
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "adapter.out.OrderRepository"),
         arguments(
-            "inboundusesoutbound", Set.of(INBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_OUTBOUND_ADAPTERS)),
+            "inboundusesoutbound",
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "adapter.out.OrderRepository"),
         arguments(
-            "outboundusesinbound", Set.of(OUTBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_INBOUND_ADAPTERS)),
-        arguments("cycle", Set.of(PACKAGES_MUST_BE_FREE_OF_CYCLES)));
+            "outboundusesinbound",
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "adapter.in.OrderController"),
+        arguments(
+            "domainusesconfig", Set.of(INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG), "config.Settings"),
+        arguments(
+            "applicationusesconfig",
+            Set.of(INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG),
+            "config.Settings"),
+        arguments(
+            "rootusesadapter",
+            Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
+            "adapter.out.OrderRepository"),
+        arguments("cycle", Set.of(PACKAGES_MUST_BE_FREE_OF_CYCLES), "domain.fill.Fill"));
   }
 
   @ParameterizedTest(name = "{0}")
   @MethodSource("fixtures")
-  void fixtureViolatesExactlyTheExpectedRules(String fixture, Set<ArchRule> expected) {
+  void fixtureViolatesExactlyTheExpectedRules(
+      String fixture, Set<ArchRule> expected, String forbiddenDependency) {
     JavaClasses classes = importFixture(fixture);
 
     Set<ArchRule> violated =
@@ -64,6 +85,10 @@ class HexagonalArchitectureTest {
             .collect(toSet());
 
     assertEquals(descriptions(expected), descriptions(violated));
+    for (ArchRule rule : violated) {
+      String report = rule.evaluate(classes).getFailureReport().toString();
+      assertTrue(report.contains(forbiddenDependency), report);
+    }
   }
 
   @Test

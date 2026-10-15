@@ -6,14 +6,14 @@ ArchUnit rules for the [hexagonal architecture](../../README.md#-hexagonal-archi
 
 Layers are recognised by package name anywhere below the service root (`com.argus.<service>`): `domain`, `application`, `adapter.in`, `adapter.out` and `config`.
 
-| Rule | Why |
+| Rule | What it checks |
 | :--- | :--- |
-| `domain` must not depend on Spring, Kafka or Aeron | The domain is pure Java. |
-| `domain` must not depend on `application`, `adapter` or `config` | The domain is the centre of the hexagon: every other layer depends on it, never the other way round. |
-| `application` must not depend on `adapter` or `config` | Use cases reach the outside world only through their ports. |
-| Only `config` may depend on `adapter` | Adapters are plugged into ports by the wiring, never referenced directly. |
-| `adapter.in` and `adapter.out` must not depend on each other | An inbound adapter drives a use case; outbound adapters are reached through ports. |
-| No dependency cycles between packages | Every package under `com.argus` is a slice, and slices must be acyclic. |
+| `LAYERS_MUST_RESPECT_THE_HEXAGON` | ArchUnit's built-in [`onionArchitecture()`](https://www.archunit.org/userguide/html/000_Index.html#_onion_architecture), which is the hexagonal architecture under another name. `domain` depends on no other layer, and `application` only on `domain`. `adapter.in` and `adapter.out` never depend on each other. Outside the layers, only `config` may use them. |
+| `DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS` | `domain` does not use Spring, Kafka or Aeron. The onion rule only checks dependencies between layers, not on libraries. |
+| `INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG` | `domain` and `application` do not use `config`. The onion rule misses this because `config` belongs to no layer, and `config` is Spring wiring. |
+| `PACKAGES_MUST_BE_FREE_OF_CYCLES` | Every package under `com.argus` is a slice, and slices must be acyclic. |
+
+Only what ArchUnit does not already provide is written by hand.
 
 A layer that a service does not have yet is not an error, so the rules can be applied from the first commit.
 
@@ -55,4 +55,4 @@ The rules then run with the rest of the tests in `./mvnw verify`. Each one is re
 
 ## How the rules are tested
 
-Each package under [`src/test/java/com/argus/architecture/fixtures`](src/test/java/com/argus/architecture/fixtures) is a tiny service. `compliant` follows every rule; every other fixture breaks one on purpose (`domainusesspring`, `applicationusesadapter`, `cycle`…). [`HexagonalArchitectureTest`](src/test/java/com/argus/architecture/HexagonalArchitectureTest.java) checks that each fixture violates exactly the rules it is meant to, and that every rule is proven by at least one fixture. When you add a rule, add a fixture that breaks it.
+Each package under [`src/test/java/com/argus/architecture/fixtures`](src/test/java/com/argus/architecture/fixtures) is a tiny service. `compliant` follows every rule; every other fixture breaks one on purpose (`domainusesspring`, `applicationusesadapter`, `cycle`…). [`HexagonalArchitectureTest`](src/test/java/com/argus/architecture/HexagonalArchitectureTest.java) checks that each fixture violates exactly the rules it is meant to, that the failure report names the forbidden dependency, and that every rule is proven by at least one fixture. The onion rule covers several cases, so the report check is what tells them apart. When you add a rule, add a fixture that breaks it.

@@ -1,6 +1,9 @@
 package com.argus.architecture;
 
+import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.Architectures.onionArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.tngtech.archunit.junit.ArchTest;
@@ -20,14 +23,14 @@ import java.util.List;
  * }</pre>
  *
  * <p>Layers are recognised by package name anywhere below the service root: {@code domain}, {@code
- * application}, {@code adapter.in}, {@code adapter.out} and {@code config}. A layer that a service
- * does not have yet is not an error.
+ * application}, {@code adapter.in} and {@code adapter.out}. {@code config} belongs to no layer and
+ * is the only code outside them allowed to use them, so that it can wire everything together. A
+ * layer that a service does not have yet is not an error.
  */
 public final class HexagonalArchitecture {
 
   static final String DOMAIN = "..domain..";
   static final String APPLICATION = "..application..";
-  static final String ADAPTER = "..adapter..";
   static final String ADAPTER_IN = "..adapter.in..";
   static final String ADAPTER_OUT = "..adapter.out..";
   static final String CONFIG = "..config..";
@@ -36,6 +39,22 @@ public final class HexagonalArchitecture {
   static final String KAFKA = "org.apache.kafka..";
   static final String AERON = "io.aeron..";
 
+  /**
+   * ArchUnit's onion architecture, which is the hexagonal one: the domain depends on no other
+   * layer, the application only on the domain, and adapters never on each other.
+   */
+  @ArchTest
+  public static final ArchRule LAYERS_MUST_RESPECT_THE_HEXAGON =
+      onionArchitecture()
+          .domainModels(DOMAIN)
+          .applicationServices(APPLICATION)
+          .adapter("inbound", ADAPTER_IN)
+          .adapter("outbound", ADAPTER_OUT)
+          .withOptionalLayers(true)
+          .ignoreDependency(resideInAPackage(CONFIG), alwaysTrue())
+          .because("dependencies point inwards: adapters are plugged into ports by config");
+
+  /** Not covered by the onion architecture, which only checks dependencies between layers. */
   @ArchTest
   public static final ArchRule DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS =
       noClasses()
@@ -48,65 +67,17 @@ public final class HexagonalArchitecture {
           .because("the domain is pure Java, and it is what keeps the hot path framework-free")
           .allowEmptyShould(true);
 
+  /** Not covered by the onion architecture either: config belongs to no layer. */
   @ArchTest
-  public static final ArchRule DOMAIN_MUST_NOT_DEPEND_ON_OTHER_LAYERS =
+  public static final ArchRule INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG =
       noClasses()
           .that()
-          .resideInAPackage(DOMAIN)
+          .resideInAnyPackage(DOMAIN, APPLICATION)
           .should()
           .dependOnClassesThat()
-          .resideInAnyPackage(APPLICATION, ADAPTER, CONFIG)
-          .as("domain must not depend on application, adapters or config")
-          .because("the domain is the centre of the hexagon: every other layer depends on it")
-          .allowEmptyShould(true);
-
-  @ArchTest
-  public static final ArchRule APPLICATION_MUST_NOT_DEPEND_ON_ADAPTERS =
-      noClasses()
-          .that()
-          .resideInAPackage(APPLICATION)
-          .should()
-          .dependOnClassesThat()
-          .resideInAnyPackage(ADAPTER, CONFIG)
-          .as("application must not depend on adapters or config")
-          .because("use cases talk to the outside world only through their ports")
-          .allowEmptyShould(true);
-
-  @ArchTest
-  public static final ArchRule ONLY_CONFIG_MAY_DEPEND_ON_ADAPTERS =
-      noClasses()
-          .that()
-          .resideOutsideOfPackages(ADAPTER, CONFIG)
-          .should()
-          .dependOnClassesThat()
-          .resideInAPackage(ADAPTER)
-          .as("only config may depend on adapters")
-          .because("adapters are plugged into ports by the wiring, never referenced directly")
-          .allowEmptyShould(true);
-
-  @ArchTest
-  public static final ArchRule INBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_OUTBOUND_ADAPTERS =
-      noClasses()
-          .that()
-          .resideInAPackage(ADAPTER_IN)
-          .should()
-          .dependOnClassesThat()
-          .resideInAPackage(ADAPTER_OUT)
-          .as("inbound adapters must not depend on outbound adapters")
-          .because(
-              "an inbound adapter drives a use case, which reaches outbound adapters via ports")
-          .allowEmptyShould(true);
-
-  @ArchTest
-  public static final ArchRule OUTBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_INBOUND_ADAPTERS =
-      noClasses()
-          .that()
-          .resideInAPackage(ADAPTER_OUT)
-          .should()
-          .dependOnClassesThat()
-          .resideInAPackage(ADAPTER_IN)
-          .as("outbound adapters must not depend on inbound adapters")
-          .because("an outbound adapter implements a port and knows nothing about who calls it")
+          .resideInAPackage(CONFIG)
+          .as("domain and application must not depend on config")
+          .because("config is Spring wiring, and it would bring the framework into the hexagon")
           .allowEmptyShould(true);
 
   @ArchTest
@@ -121,12 +92,9 @@ public final class HexagonalArchitecture {
   /** Every rule above, in declaration order. */
   public static List<ArchRule> rules() {
     return List.of(
+        LAYERS_MUST_RESPECT_THE_HEXAGON,
         DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS,
-        DOMAIN_MUST_NOT_DEPEND_ON_OTHER_LAYERS,
-        APPLICATION_MUST_NOT_DEPEND_ON_ADAPTERS,
-        ONLY_CONFIG_MAY_DEPEND_ON_ADAPTERS,
-        INBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_OUTBOUND_ADAPTERS,
-        OUTBOUND_ADAPTERS_MUST_NOT_DEPEND_ON_INBOUND_ADAPTERS,
+        INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG,
         PACKAGES_MUST_BE_FREE_OF_CYCLES);
   }
 
