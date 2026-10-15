@@ -170,8 +170,8 @@ com.argus.<service>
 
 | Channel / Topic | Transport | Schema | Description |
 | :--- | :--- | :--- | :--- |
-| `aeron:ipc` stream 1001 | Aeron | SBE `Trade` | Normalised trades from the feed gateway |
-| `aeron:udp` stream 2001 | Aeron | SBE `Signal` | Signals for fast-path consumers |
+| `aeron:ipc` stream 1001 | Aeron | SBE `Trade`, `BestBidAsk`, `Heartbeat` | Normalised market data from the feed gateway |
+| `aeron:udp` stream 2001 | Aeron | SBE `Signal`, `Heartbeat` | Signals for fast-path consumers |
 | `argus.market.trades.v1` | Kafka | Protobuf | Normalised trades (archive) |
 | `argus.market.candles.v1` | Kafka | Protobuf | 1s / 1m candles |
 | `argus.signals.v1` | Kafka | Protobuf | Signals emitted by rules |
@@ -179,6 +179,8 @@ com.argus.<service>
 | `argus.rules.v1` | Kafka (compacted) | Protobuf | Current Python rule definitions (source + metadata) |
 | `argus.rule-params.v1` | Kafka (compacted) | Protobuf | Calibrated rule parameters from the quant lab |
 | `argus.alerts.dlq.v1` | Kafka | Protobuf | Actions that failed after retries |
+
+The fast-path messages are described in [`contracts/README.md`](contracts/README.md).
 
 ---
 
@@ -274,6 +276,7 @@ Notes on the build:
 - **One parent POM.** Every dependency and plugin version is declared in the root [`pom.xml`](pom.xml). Modules declare dependencies without a version.
 - **Toolchain checks.** The Maven Enforcer plugin fails the build with a clear message on Java older than 25 or Maven older than 3.9.
 - **Formatting is enforced.** `verify` runs `spotless:check` and fails on unformatted code; run `spotless:apply` to fix it.
+- **Agrona needs a JVM flag.** On Java 25, every JVM that loads Agrona (SBE codecs, Aeron) must start with `--add-exports java.base/jdk.internal.misc=ALL-UNNAMED`. The build passes it to tests through the `agrona.jvm.args` property; services must pass it at runtime.
 
 ---
 
