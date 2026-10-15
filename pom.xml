@@ -92,6 +92,13 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>com.argus</groupId>
+                <artifactId>argus-architecture-rules</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- Fast path -->
             <dependency>
                 <groupId>io.aeron</groupId>

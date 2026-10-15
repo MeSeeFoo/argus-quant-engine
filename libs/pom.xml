@@ -17,5 +17,6 @@
     <description>Aggregator for the modules under libs/. Modules are added as they are created.</description>
 
     <modules>
+        <module>architecture-rules</module>
     </modules>
 </project>
