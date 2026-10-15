@@ -27,6 +27,8 @@ services:
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+      # Topics are created by kafka-init from kafka/topics.conf, never on first use.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -35,6 +37,36 @@ services:
       timeout: 15s
       retries: 10
       start_period: 20s
+
+  kafka-init:
+    # Creates the topics in kafka/topics.conf (or updates them), then idles.
+    # It stays up on purpose: `up --wait` treats a container that exits as a
+    # failure unless another service waits for it, and no service does yet.
+    # Services that use Kafka depend on it with condition: service_healthy.
+    # Apply changes to topics.conf with: docker compose restart kafka-init
+    image: apache/kafka:4.3.1
+    command:
+      - /bin/sh
+      - -c
+      # The marker survives a restart, so it is removed before provisioning again.
+      - rm -f /tmp/topics-ready && /bin/sh /opt/argus/create-topics.sh /opt/argus/topics.conf && touch /tmp/topics-ready && exec sleep infinity
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      REPLICATION_FACTOR: 1
+    volumes:
+      - ./kafka:/opt/argus:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    # Forwards SIGTERM, so `docker compose stop` does not wait for the timeout.
+    init: true
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/topics-ready"]
+      interval: 5s
+      timeout: 2s
+      retries: 30
+      start_interval: 1s
+      start_period: 60s
 
   questdb:
     image: questdb/questdb:10.0.1
