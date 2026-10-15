@@ -13,7 +13,7 @@
     <artifactId>argus-contracts</artifactId>
 
     <name>Argus :: Contracts</name>
-    <description>Message contracts: SBE codecs for the fast path (Aeron).</description>
+    <description>Message contracts: SBE codecs for the fast path (Aeron) and Protobuf messages for the durable path (Kafka).</description>
 
     <properties>
         <sbe.schema>${project.basedir}/src/main/resources/sbe/argus-fastpath.xml</sbe.schema>
@@ -25,6 +25,11 @@
         <dependency>
             <groupId>org.agrona</groupId>
             <artifactId>agrona</artifactId>
+        </dependency>
+        <!-- Runtime for the generated Protobuf messages -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
         </dependency>
 
         <dependency>
@@ -102,6 +107,22 @@
                             <sources>
                                 <source>${sbe.generated.dir}</source>
                             </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Generates the Java messages from src/main/protobuf. Sources are never committed. -->
+            <plugin>
+                <groupId>io.github.ascopes</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-protobuf-messages</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <fatalWarnings>true</fatalWarnings>
                         </configuration>
                     </execution>
                 </executions>

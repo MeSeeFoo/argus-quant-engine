@@ -1,0 +1,43 @@
+// Topic argus.market.trades.v1: normalised trades, archived by the market archiver.
+//
+// Mirrors the fast-path SBE Trade message: same fields, same field numbers (= SBE field ids),
+// same decimal scale. Evolution rules: see contracts/README.md.
+syntax = "proto3";
+
+package argus.market.trades.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "TradeProto";
+option java_package = "com.argus.contracts.proto.market.trades.v1";
+
+// An execution that happened on the venue: a buyer and a seller crossed at a price and quantity.
+// It is a fact and is never corrected.
+//
+// Kafka key: "VENUE:SYMBOL" (e.g. "BINANCE:BTCUSDT").
+message Trade {
+  // Gateway sequence, shared with BestBidAsk on the fast path. Starts at 1.
+  uint64 sequence = 1;
+  // Trade id assigned by the venue.
+  int64 trade_id = 2;
+  // Decimal64 mantissa: value = price × 10⁻⁸.
+  int64 price = 3;
+  // Decimal64 mantissa: value = quantity × 10⁻⁸.
+  int64 quantity = 4;
+  // Execution time on the venue, nanoseconds since the Unix epoch (UTC).
+  int64 exchange_timestamp = 5;
+  // Time the gateway received it, nanoseconds since the Unix epoch (UTC).
+  int64 receive_timestamp = 6;
+  // Side that crossed the spread.
+  Side aggressor_side = 7;
+  // Uppercase venue code, at most 12 US-ASCII characters (e.g. "BINANCE").
+  string venue = 8;
+  // Symbol as the venue names it, uppercase, no separator, at most 24 US-ASCII characters (e.g. "BTCUSDT").
+  string symbol = 9;
+}
+
+// Aggressor side of a trade. Non-zero values match the SBE Side enum.
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_BUY = 1;
+  SIDE_SELL = 2;
+}

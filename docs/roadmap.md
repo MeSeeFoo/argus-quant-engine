@@ -11,7 +11,7 @@ Some work can be pulled forward when it makes sense. For example, basic metrics 
 **Goal:** prepare the ground before writing any business logic.
 
 - **Maven multi-module build:** a parent `pom.xml` that centralises versions (Spring Boot, Aeron, SBE…) and enforces Java 25 and Maven 3.9+.
-- **`argus-contracts`:** message schemas. SBE for the fast path (`Trade`, `BestBidAsk`, `Signal`, `Heartbeat`) and Protobuf for Kafka. The Java code is generated at build time.
+- **`argus-contracts`:** message schemas. SBE for the fast path (`Trade`, `BestBidAsk`, `Signal`, `Heartbeat`) and Protobuf for Kafka (`Trade`, `BestBidAsk`, `Signal`, one per topic). The Java code is generated at build time.
 - **Docker Compose:** Kafka, QuestDB, PostgreSQL, Apicurio (schema registry) and Grafana, started locally with a single command.
 - **ArchUnit rules:** tests that check the hexagonal architecture automatically. For example, `domain` must not depend on Spring or Kafka.
 - **GitHub Actions CI:** every push builds the project and runs the tests.
@@ -41,11 +41,11 @@ Agents can be refined or added as later phases arrive. The frontend agent, for i
 
 **Goal:** a real piece of data flows through the whole system, even with minimal logic.
 
-- **`argus-feed-gateway`:** connects to Binance and publishes trades over Aeron.
-- **`argus-signal-engine`:** receives the trades, builds candles (1s/1m) and computes simple indicators (SMA/EMA). Publishes to Kafka without blocking the fast path.
-- **`argus-market-archiver`:** consumes from Kafka and stores the data in QuestDB.
+- **`argus-feed-gateway`:** connects to Binance and publishes trades and top-of-book updates over Aeron.
+- **`argus-signal-engine`:** receives the ticks, keeps in-memory windows (1s/1m) and computes simple indicators (SMA/EMA). Publishes every tick to Kafka without blocking the fast path, and counts the ones it has to drop.
+- **`argus-market-archiver`:** consumes from Kafka and stores the ticks in QuestDB.
 
-**Done when:** real BTCUSDT trades and candles are being stored in the database. This is the most important phase, because it validates the backbone of the system.
+**Done when:** real BTCUSDT trades and top-of-book updates are being stored in the database, and a QuestDB query (`SAMPLE BY`) returns 1-minute candles built from them. This is the most important phase, because it validates the backbone of the system.
 
 ## Phase 3 · Python rules & alerts
 
