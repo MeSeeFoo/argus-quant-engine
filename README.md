@@ -1,5 +1,7 @@
 # Argus Quant Engine
 
+[![CI](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml)
+
 > **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed Python rules, a quant research lab, and a cloud-native deployment on AWS.**
 
 > [!NOTE]
@@ -162,7 +164,7 @@ com.argus.<service>
 └── config        # Spring wiring (the only package allowed to depend on adapters)
 ```
 
-**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the signal engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class.
+**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the signal engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class.
 
 ---
 
@@ -286,6 +288,13 @@ Notes on the build:
 - **Toolchain checks.** The Maven Enforcer plugin fails the build with a clear message on Java older than 25 or Maven older than 3.9.
 - **Formatting is enforced.** `verify` runs `spotless:check` and fails on unformatted code; run `spotless:apply` to fix it.
 - **Agrona needs a JVM flag.** On Java 25, every JVM that loads Agrona (SBE codecs, Aeron) must start with `--add-exports java.base/jdk.internal.misc=ALL-UNNAMED`. The build passes it to tests through the `agrona.jvm.args` property; services must pass it at runtime.
+
+### Continuous integration
+
+GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push to `main` and on every pull request, with two jobs:
+
+- **Build and test:** `./mvnw verify` on Linux with JDK 25 (Temurin), with the Maven repository cached between runs. A failing test, a broken architecture rule or unformatted code fails the job. The JUnit results are published as a *Test report* check on the pull request, with failing tests annotated on the code.
+- **Compose smoke test:** creates `.env` from `.env.example` and runs `docker compose up -d --wait` in `infra/docker`, so it fails if any container does not become healthy within five minutes. The container logs are printed when it fails.
 
 ---
 
