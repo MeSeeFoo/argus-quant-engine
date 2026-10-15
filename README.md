@@ -162,7 +162,7 @@ com.argus.<service>
 └── config        # Spring wiring (the only package allowed to depend on adapters)
 ```
 
-**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the signal engine's hot path free of framework code.
+**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the signal engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class.
 
 ---
 
@@ -248,6 +248,7 @@ Cloud VMs have more jitter than dedicated hardware. Results are reported togethe
 argus-quant-engine/
 ├── contracts/            # argus-contracts: SBE + Protobuf schemas
 ├── libs/
+│   ├── architecture-rules/ # argus-architecture-rules (ArchUnit rules for every service)
 │   └── rule-runtime/     # argus-rule-runtime (+ the argus Python SDK)
 ├── services/
 │   ├── feed-gateway/
