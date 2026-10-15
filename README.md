@@ -288,6 +288,47 @@ Notes on the build:
 
 ---
 
+## 🐳 Local environment
+
+The shared infrastructure runs with Docker Compose, defined in [`infra/docker/docker-compose.yml`](infra/docker/docker-compose.yml). **Prerequisite:** Docker with Compose v2 (Docker Desktop on Windows and macOS).
+
+Run every command from `infra/docker`. The first time, create your `.env` from the template; it holds every port and credential, and is git-ignored:
+
+```bash
+cp .env.example .env
+```
+
+| Service | Host address | Notes |
+| :--- | :--- | :--- |
+| **Kafka** (KRaft, single node) | `localhost:9092` | Containers use `kafka:29092` |
+| **QuestDB** | Console: <http://localhost:9000> · ILP: `localhost:9009` · PostgreSQL wire: `localhost:8812` | PG wire user `admin` / `quest` |
+| **PostgreSQL** | `localhost:5432` | Database, user and password `argus` |
+| **Apicurio Registry** | API: <http://localhost:8080/apis/registry/v3> · UI: <http://localhost:8888> | Stores its schemas in its own `apicurio` database in PostgreSQL |
+| **Grafana LGTM** | Grafana: <http://localhost:3000> · OTLP: `localhost:4317` (gRPC), `localhost:4318` (HTTP) | Login `admin` / `admin`. Includes the OpenTelemetry Collector, Prometheus, Tempo, Loki and Pyroscope |
+
+The values above are the defaults from `.env.example`. If a port is already taken on your machine, change it in `.env`.
+
+```bash
+docker compose up -d --wait   # start everything; returns once every container is healthy
+docker compose ps             # status and health of each container
+docker compose logs -f kafka  # follow the logs of one service
+docker compose stop           # stop the containers, keep them and their data
+docker compose down           # remove the containers, keep the data
+docker compose down -v        # remove the containers AND the data volumes (full reset)
+```
+
+Data lives in named volumes (`argus_kafka-data`, `argus_questdb-data`, `argus_postgres-data`, `argus_grafana-data`), so it survives `down` and `up`. To start from scratch, run `docker compose down -v`. A reset is also required after changing the PostgreSQL or Apicurio credentials in `.env`, because the databases and users are only created when the PostgreSQL volume is empty.
+
+To reset a single service, remove its container and volume, for example QuestDB:
+
+```bash
+docker compose rm -sf questdb
+docker volume rm argus_questdb-data
+docker compose up -d --wait
+```
+
+---
+
 ## 🗺️ Roadmap
 
 - [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
