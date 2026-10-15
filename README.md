@@ -42,7 +42,7 @@ The whole platform runs locally with Docker Compose and is deployed **end-to-end
 | **Fast path** | Aeron (IPC within a host, UDP unicast between hosts) | SBE (Simple Binary Encoding) | Ticks into the engine, and signals out to trading consumers |
 | **Durable path** | Apache Kafka | Protobuf + Schema Registry | Archiving, alerting, rule distribution, UI streaming |
 
-The engine never blocks on Kafka. Results are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path.
+The engine never blocks on Kafka. Results are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path. The trade-off is accepted on purpose: if the ring buffer fills up, messages are dropped rather than slowing the engine down (see [Market data on Kafka](#market-data-on-kafka)).
 
 ### System diagram
 
@@ -66,7 +66,7 @@ flowchart LR
     K --> ARC["argus-market-archiver"]
     ARC --> QDB[("QuestDB<br/>(market data)")]
 
-    K -->|"signals, alerts, bars"| API["argus-api<br/>(BFF)"]
+    K -->|"ticks, signals, alerts"| API["argus-api<br/>(BFF)"]
     QDB --> API
     API <--> PG[("PostgreSQL<br/>(rules)")]
     API -->|"rule changes"| K
@@ -83,12 +83,12 @@ flowchart LR
 | Component | Type | Tech | Responsibility |
 | :--- | :--- | :--- | :--- |
 | **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades into SBE messages and publishes them over Aeron. Handles reconnection and sequence-gap detection. A replay mode feeds Binance's public historical data instead, for reproducible tests and benchmarks. |
-| **`argus-signal-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Maintains sliding windows and candles, computes built-in indicators, and evaluates the users' Python rules in the embedded sandbox. Emits signals over Aeron and events to Kafka. |
+| **`argus-signal-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Maintains in-memory sliding windows sized by what each rule declares (for example its timeframe), computes built-in indicators, and evaluates the users' Python rules in the embedded sandbox. Emits signals over Aeron, and publishes every market tick and signal to Kafka. |
 | **`argus-rule-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python rules, embedded in the signal engine. Provides the `argus` SDK (`@rule`, indicators, `argus.math`), applies isolation and resource limits, and manages the rule lifecycle. |
 | **`argus-strategy-sim`** | Service | Spring Boot, Aeron | Reference fast-path consumer. Subscribes to signals, simulates order fills and tracks a paper portfolio. It also records the signal-to-reaction latency. |
 | **`argus-action-dispatcher`** | Service | Spring Boot, Resilience4j | Consumes alert events and runs actions (webhooks, email) with retries, circuit breakers and a dead-letter topic. |
-| **`argus-market-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists trades, candles, signals and alerts into QuestDB time-partitioned tables, in batches. |
-| **`argus-api`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Rule management (CRUD, validation, versioning), historical queries, and live streaming of Kafka events to the UI. |
+| **`argus-market-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists every trade and top-of-book update, plus signals and alerts, into QuestDB time-partitioned tables, in batches. |
+| **`argus-api`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Rule management (CRUD, validation, versioning), historical queries, and live streaming of Kafka events to the UI. Chart candles are computed on request from the ticks in QuestDB (`SAMPLE BY`), at the resolution the user picks. |
 | **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, signals and alerts, plus a Python rule editor. |
 | **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Publishes calibrated parameters for live rules to Kafka. |
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
@@ -120,7 +120,7 @@ def oversold_in_uptrend(ctx, params):
         return Signal.long(strength=0.8)
 ```
 
-- **`@rule` metadata** (symbols, timeframe, actions, parameters) is read when the rule is loaded. The engine uses it to know which indicators to maintain, and the UI uses it to display the rule.
+- **`@rule` metadata** (symbols, timeframe, actions, parameters) is read when the rule is loaded. The engine uses it to know which indicators to maintain and how much history each window must keep, and the UI uses it to display the rule.
 - **Built-in indicators** (SMA, EMA, RSI, ATR, VWAP, Bollinger bands…) are implemented in Java and exposed to Python as read-only views, so the expensive work stays on the zero-allocation path.
 - **Incremental maths in pure Python** (z-scores, rolling regressions, Kalman filters, GARCH updates…) runs well: GraalPy JIT-compiles pure Python code.
 - **`argus.math`:** vetted numerical functions (for example linear algebra and statistics) implemented in Java and explicitly exposed to the sandbox. This replaces NumPy, which cannot run inside the sandbox.
@@ -180,7 +180,15 @@ com.argus.<service>
 | `argus.rule-params.v1` | Kafka (compacted) | Protobuf | Calibrated rule parameters from the quant lab |
 | `argus.alerts.dlq.v1` | Kafka | Protobuf | Actions that failed after retries |
 
-The fast-path messages are described in [`contracts/README.md`](contracts/README.md).
+All messages, fast path and Kafka, are described in [`contracts/README.md`](contracts/README.md).
+
+### Market data on Kafka
+
+- **Every tick, never aggregated.** `argus.market.trades.v1` and `argus.market.quotes.v1` carry every trade and every top-of-book update the engine receives. Nothing is pre-aggregated: candles for charts are computed on request by `argus-api` from the ticks stored in QuestDB, and rules keep their own windows in memory. Any resolution can be derived later without reprocessing.
+- **Losses are possible, and visible.** The engine never blocks on Kafka, so if the publisher's ring buffer is full, ticks are dropped instead of slowing down the fast path. This is an accepted trade-off. Every dropped message is counted in a metric, and the `sequence` field leaves a gap that consumers (and any later analysis) can detect.
+- **Kafka is not the archive.** Topics have a limited retention (days). QuestDB holds the queryable history.
+
+**Data lake (out of scope).** Because the market topics hold the full tick stream with schemas registered in Apicurio, they can be exported as they are to a data lake for batch processing, for example with Kafka Connect / MSK Connect writing Parquet or Apache Iceberg tables to S3, read later from notebooks (Spark, DuckDB, pandas). Argus does not implement this; the contracts are designed so that it can be added without changes.
 
 ---
 
@@ -284,7 +292,7 @@ Notes on the build:
 
 - [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
 - [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
-- [ ] **Phase 2: Vertical slice.** Feed gateway → signal engine (candles + SMA/EMA) → Kafka → archiver → QuestDB.
+- [ ] **Phase 2: Vertical slice.** Feed gateway → signal engine (windows + SMA/EMA) → Kafka → archiver → QuestDB.
 - [ ] **Phase 3: Python rules & alerts.** GraalPy proof of concept, `argus-rule-runtime` and the `argus` SDK, sandbox limits and circuit breaker, compacted rules topic, action dispatcher with Resilience4j.
 - [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live rules.
 - [ ] **Phase 5: API & UI.** `argus-api` (REST, WebSocket, OIDC) and the Angular dashboard.

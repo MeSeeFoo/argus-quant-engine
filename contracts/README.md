@@ -161,6 +161,8 @@ Protobuf does not enforce the length limits: the strings come from SBE messages,
 
 `Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
 
+The market topics carry **every tick, never aggregated**: there is no candle topic. Candles are computed on request from the stored ticks, at whatever resolution is needed, so the full stream stays available for archiving and for a future export to a data lake. The publisher may drop ticks under backpressure rather than block the fast path; a drop shows up as a gap in `sequence`. See [Market data on Kafka](../README.md#market-data-on-kafka).
+
 **`Trade`**
 
 | # | Field | Type | Meaning |
