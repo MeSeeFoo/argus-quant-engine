@@ -180,7 +180,7 @@ com.argus.<service>
 | `argus.rule-params.v1` | Kafka (compacted) | Protobuf | Calibrated rule parameters from the quant lab |
 | `argus.alerts.dlq.v1` | Kafka | Protobuf | Actions that failed after retries |
 
-All messages, fast path and Kafka, are described in [`contracts/README.md`](contracts/README.md).
+All messages, fast path and Kafka, are described in [`contracts/README.md`](contracts/README.md). Partitions, cleanup policy and retention of each Kafka topic are defined in [`infra/docker/kafka/topics.conf`](infra/docker/kafka/topics.conf) (see [Kafka topics](#kafka-topics)).
 
 ### Market data on Kafka
 
@@ -326,6 +326,20 @@ docker compose rm -sf questdb
 docker volume rm argus_questdb-data
 docker compose up -d --wait
 ```
+
+### Kafka topics
+
+Kafka does not create topics on first use (`auto.create.topics.enable=false`): a producer that writes to an unknown topic fails. Every topic is defined in [`infra/docker/kafka/topics.conf`](infra/docker/kafka/topics.conf), one line per topic with its partitions, cleanup policy and retention. The `kafka-init` service runs [`create-topics.sh`](infra/docker/kafka/create-topics.sh) once Kafka is healthy: it creates the missing topics, applies the configuration to the existing ones, and becomes healthy when it is done. `docker compose up -d --wait` therefore returns only once every topic exists.
+
+`kafka-init` stays up after provisioning, on purpose: Compose's `--wait` treats a container that exits as a failure unless another service waits for it. Services that use Kafka declare `depends_on: kafka-init: condition: service_healthy`.
+
+To add a topic or change one, edit `topics.conf` and run it again (it is idempotent):
+
+```bash
+docker compose restart kafka-init
+```
+
+Partitions can only grow. If `topics.conf` asks for fewer partitions than a topic has, the script logs a warning and keeps the topic as it is; removing partitions means deleting the topic (or resetting Kafka with `docker compose down -v`).
 
 ---
 
