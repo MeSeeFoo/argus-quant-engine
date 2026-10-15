@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.argus</groupId>
+        <artifactId>argus-libs</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>argus-architecture-rules</artifactId>
+
+    <name>Argus :: Libraries :: Architecture Rules</name>
+    <description>ArchUnit rules for the hexagonal architecture. Services apply them with a single test class.</description>
+
+    <dependencies>
+        <!-- Rules are declared with the JUnit 5 API (@ArchTest) and run by its engine.
+             Services depend on this module with test scope, so this stays out of their runtime. -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Forbidden in the domain. Only the fixtures with deliberate violations use them. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.aeron</groupId>
+            <artifactId>aeron-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
