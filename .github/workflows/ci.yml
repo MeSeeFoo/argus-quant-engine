@@ -1,5 +1,6 @@
-# Builds and tests every push to main and every pull request, and checks that
-# the local Docker Compose stack starts and becomes healthy.
+# Builds and tests every pull request and every push to main, runs the
+# SonarQube Cloud quality gate, and checks that the local Docker Compose stack
+# starts and becomes healthy. See docs/ci.md.
 name: CI
 
 on:
@@ -25,22 +26,29 @@ jobs:
       contents: read
       # Lets the test report action publish its check run with the results.
       checks: write
+    env:
+      # Empty on pull requests from forks and Dependabot: the analysis is skipped there.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: SonarQube uses it to tell new code from old code.
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
 
-      - name: Build, test and check formatting
+      - name: Build, test and check formatting, coverage and static analysis
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
       - name: Publish test report
         if: ${{ !cancelled() }}
-        uses: mikepenz/action-junit-report@v6
+        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
         with:
           check_name: Test report
           report_paths: "**/target/surefire-reports/TEST-*.xml"
@@ -50,11 +58,20 @@ jobs:
 
       - name: Upload test reports
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: surefire-reports
           path: "**/target/surefire-reports/"
           retention-days: 7
+
+      # Analyses the code already built and waits for the quality gate: a red gate fails the job.
+      - name: SonarQube Cloud analysis and quality gate
+        if: ${{ env.SONAR_TOKEN != '' }}
+        run: ./mvnw --batch-mode --no-transfer-progress sonar:sonar -Dsonar.qualitygate.wait=true
+
+      - name: Report a skipped SonarQube Cloud analysis
+        if: ${{ env.SONAR_TOKEN == '' }}
+        run: echo "::warning title=SonarQube Cloud skipped::SONAR_TOKEN is not available, so the quality gate was not checked."
 
   compose-smoke-test:
     name: Compose smoke test
@@ -64,7 +81,9 @@ jobs:
       run:
         working-directory: infra/docker
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Create .env from the template
         run: cp .env.example .env

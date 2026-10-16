@@ -1,0 +1,114 @@
+# Checks that only make sense on a pull request: repository conventions,
+# new vulnerable dependencies, internal links and the workflows themselves.
+# See docs/ci.md.
+name: PR checks
+
+on:
+  pull_request:
+    # "edited" re-checks the title when it changes.
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: Conventions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Pull requests opened by bots follow their own naming.
+    if: ${{ !startsWith(github.head_ref, 'dependabot/') && !startsWith(github.head_ref, 'release-please--') }}
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Title follows Conventional Commits and references an issue
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          subjectPattern: ^.+ \(#\d+\)$
+          subjectPatternError: |
+            The title "{title}" must end with the issue it belongs to, for example
+            "feat(build): add parent POM (#1)".
+
+      - name: Branch name is <type>/<issue>-<slug>
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+          if [[ ! "$BRANCH" =~ $pattern ]]; then
+            echo "::error title=Branch name::'$BRANCH' does not match <type>/<issue>-<slug>, for example feat/1-maven-build."
+            exit 1
+          fi
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fail on new dependencies with known vulnerabilities
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
+  links:
+    name: Internal links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # External links are checked by nightly.yml: a website that is down must not block a pull request.
+      - name: Check links between Markdown files
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --offline './**/*.md'
+
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint the workflows (actionlint)
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+
+      - name: Audit the workflows for security issues (zizmor)
+        uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          # Fail here instead of uploading the results to code scanning.
+          advanced-security: false
+
+  protobuf:
+    name: Protobuf contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Kafka consumers rely on these contracts: a removed or renumbered field fails here.
+      - name: Lint, format and breaking-change check (buf)
+        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+        with:
+          input: contracts/src/main/protobuf
+          lint: true
+          format: true
+          breaking: true
+          breaking_against: ${{ github.event.repository.clone_url }}#branch=${{ github.base_ref }},subdir=contracts/src/main/protobuf
+          push: false
+          pr_comment: false

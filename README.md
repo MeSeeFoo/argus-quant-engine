@@ -1,6 +1,8 @@
 # Argus Quant Engine
 
 [![CI](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
 
 > **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed Python rules, a quant research lab, and a cloud-native deployment on AWS.**
 
@@ -287,14 +289,23 @@ Notes on the build:
 - **One parent POM.** Every dependency and plugin version is declared in the root [`pom.xml`](pom.xml). Modules declare dependencies without a version.
 - **Toolchain checks.** The Maven Enforcer plugin fails the build with a clear message on Java older than 25 or Maven older than 3.9.
 - **Formatting is enforced.** `verify` runs `spotless:check` and fails on unformatted code; run `spotless:apply` to fix it.
+- **Static analysis at compile time.** [Error Prone](https://errorprone.info/) runs inside `javac` and every warning fails the build. [NullAway](https://github.com/uber/NullAway) treats every type under `com.argus` as non-null: a value that can be null must be annotated with JSpecify's `@Nullable` (`org.jspecify:jspecify`, version managed in the parent POM). Generated sources are not checked. Error Prone needs access to `javac` internals, granted in [`.mvn/jvm.config`](.mvn/jvm.config).
+- **Coverage thresholds.** JaCoCo measures the tests of every module and `verify` fails below 80 % of lines or 70 % of branches (properties `coverage.line.minimum` and `coverage.branch.minimum`). Generated code (SBE codecs, Protobuf messages) is excluded. The report is in `target/site/jacoco/index.html` of each module.
 - **Agrona needs a JVM flag.** On Java 25, every JVM that loads Agrona (SBE codecs, Aeron) must start with `--add-exports java.base/jdk.internal.misc=ALL-UNNAMED`. The build passes it to tests through the `agrona.jvm.args` property; services must pass it at runtime.
 
 ### Continuous integration
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push to `main` and on every pull request, with two jobs:
+GitHub Actions workflows, organised by responsibility:
 
-- **Build and test:** `./mvnw verify` on Linux with JDK 25 (Temurin), with the Maven repository cached between runs. A failing test, a broken architecture rule or unformatted code fails the job. The JUnit results are published as a *Test report* check on the pull request, with failing tests annotated on the code.
-- **Compose smoke test:** creates `.env` from `.env.example` and runs `docker compose up -d --wait` in `infra/docker`, so it fails if any container does not become healthy within five minutes. The container logs are printed when it fails.
+| Workflow | Runs on | Purpose |
+| :--- | :--- | :--- |
+| `ci.yml` | Pull request, push to `main`, manual | Build, tests, coverage, static analysis, SonarQube quality gate, Compose smoke test |
+| `pr-checks.yml` | Pull request | Conventions, new vulnerable dependencies, internal links, workflow lint, Protobuf breaking changes |
+| `release.yml` | Push to `main` | Release pull request, tag, GitHub Release with SBOM |
+| `nightly.yml` | Every night, manual | Windows build, every link, known vulnerabilities |
+| CodeQL | Pull request, push to `main`, weekly | Security analysis |
+
+`main` only accepts pull requests whose required checks are green. [`docs/ci.md`](docs/ci.md) describes every check, when it runs, how to run a workflow by hand on a branch, how releases work, and how to run each check locally.
 
 ---
 

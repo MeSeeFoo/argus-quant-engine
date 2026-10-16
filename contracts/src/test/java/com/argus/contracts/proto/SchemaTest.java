@@ -20,6 +20,7 @@ import com.google.protobuf.UnknownFieldSet;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -158,7 +159,7 @@ class SchemaTest {
   }
 
   private static String typeName(FieldDescriptor field) {
-    return field.getType().name().toLowerCase();
+    return field.getType().name().toLowerCase(Locale.ROOT);
   }
 
   private static void assertValues(EnumDescriptor type, String... expected) {

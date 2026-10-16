@@ -127,6 +127,17 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Generated codecs and messages are not counted in the coverage report or thresholds. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>com/argus/contracts/sbe/**</exclude>
+                        <exclude>com/argus/contracts/proto/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

@@ -4,6 +4,7 @@ import static com.argus.architecture.HexagonalArchitecture.DOMAIN_MUST_NOT_DEPEN
 import static com.argus.architecture.HexagonalArchitecture.INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG;
 import static com.argus.architecture.HexagonalArchitecture.LAYERS_MUST_RESPECT_THE_HEXAGON;
 import static com.argus.architecture.HexagonalArchitecture.PACKAGES_MUST_BE_FREE_OF_CYCLES;
+import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -110,8 +111,9 @@ class HexagonalArchitectureTest {
         assertThrows(
             AssertionError.class, () -> DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS.check(classes));
 
-    assertTrue(failure.getMessage().contains("domainusesspring.domain.Order"));
-    assertTrue(failure.getMessage().contains("org.springframework.util.Assert"));
+    String message = requireNonNull(failure.getMessage());
+    assertTrue(message.contains("domainusesspring.domain.Order"));
+    assertTrue(message.contains("org.springframework.util.Assert"));
   }
 
   @Test
