@@ -230,3 +230,5 @@ Not allowed in `v1`, because they break consumers:
 A breaking change means a **new topic** (`argus.market.trades.v2`) with a new package and file. Producers publish to both topics during the migration, and `v1` is retired once no consumer reads it.
 
 [`SchemaTest`](src/test/java/com/argus/contracts/proto/SchemaTest.java) pins the package of each topic, every field number, name and type, the enum values, and the ids shared with SBE. It also checks that the current classes read a message written by a newer version. If it fails, the wire contract changed: check these rules before updating the expected values.
+
+On every pull request, [`buf breaking`](https://buf.build/docs/breaking/) compares the schemas with the target branch using the rules in [`buf.yaml`](src/main/protobuf/buf.yaml), which match the list above, and fails the pull request on a breaking change. `buf lint` and `buf format` run in the same check.

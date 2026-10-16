@@ -91,3 +91,24 @@ jobs:
         with:
           # Fail here instead of uploading the results to code scanning.
           advanced-security: false
+
+  protobuf:
+    name: Protobuf contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Kafka consumers rely on these contracts: a removed or renumbered field fails here.
+      - name: Lint, format and breaking-change check (buf)
+        uses: bufbuild/buf-action@v1.6.0
+        with:
+          input: contracts/src/main/protobuf
+          lint: true
+          format: true
+          breaking: true
+          breaking_against: ${{ github.event.repository.clone_url }}#branch=${{ github.base_ref }},subdir=contracts/src/main/protobuf
+          push: false
+          pr_comment: false

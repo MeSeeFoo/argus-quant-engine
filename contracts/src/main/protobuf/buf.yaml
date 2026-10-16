@@ -1,0 +1,13 @@
+# Buf module for the Kafka contracts. pr-checks.yml runs buf lint, buf format
+# and buf breaking (against the target branch) on every pull request.
+version: v2
+lint:
+  use:
+    - STANDARD
+# Matches "Evolving the schemas" in contracts/README.md: wire and JSON
+# compatibility (a field may be removed only if its number and name are
+# reserved), and every file keeps its package.
+breaking:
+  use:
+    - WIRE_JSON
+    - FILE_SAME_PACKAGE
