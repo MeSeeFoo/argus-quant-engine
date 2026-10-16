@@ -62,6 +62,9 @@
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.5.1</archunit.version>
         <jspecify.version>1.0.1</jspecify.version>
+        <!-- Overrides the version brought by kafka-clients, which has known vulnerabilities
+             (GHSA-mcr4-qmvw-px4g and others). Remove once Kafka ships 1.11.4 or newer. -->
+        <lz4-java.version>1.11.4</lz4-java.version>
 
         <!-- Plugins -->
         <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
@@ -142,6 +145,13 @@
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
+            </dependency>
+
+            <!-- Security override, see lz4-java.version -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
             </dependency>
 
             <!-- Nullness annotations (@Nullable) checked by NullAway -->
