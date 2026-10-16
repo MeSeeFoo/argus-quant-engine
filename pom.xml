@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.argus</groupId>
     <artifactId>argus-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>Argus Quant Engine</name>
@@ -42,7 +40,7 @@
              Every JVM that loads Agrona must start with this flag: tests here, services at runtime. -->
         <agrona.jvm.args>--add-exports java.base/jdk.internal.misc=ALL-UNNAMED</agrona.jvm.args>
         <!-- Set by JaCoCo to its agent; empty when JaCoCo does not run, so tests still start. -->
-        <argLine></argLine>
+        <argLine/>
         <!-- Coverage thresholds, checked by ./mvnw verify in every module with hand-written code -->
         <coverage.line.minimum>0.80</coverage.line.minimum>
         <coverage.branch.minimum>0.70</coverage.branch.minimum>
