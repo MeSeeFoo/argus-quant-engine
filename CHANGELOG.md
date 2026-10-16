@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.1.1](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.1.0...v0.1.1) (2026-10-16)
+
+
+### Documentation
+
+* add issue and pull request templates ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([e1f3578](https://github.com/MeSeeFoo/argus-quant-engine/commit/e1f35782614718eab8aee904dd84be368c66ecc8))
+* add repository conventions, templates and contributing guide ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([a512b41](https://github.com/MeSeeFoo/argus-quant-engine/commit/a512b412f4141ed093f056a1e602b93a40cbc116))
+* add the contributing guide and explain the trunk-based branching model ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([29c9a67](https://github.com/MeSeeFoo/argus-quant-engine/commit/29c9a67dea13ae2613654cc37ada6825490a2b5e))
+* link the contributing guide from the README ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([1e10458](https://github.com/MeSeeFoo/argus-quant-engine/commit/1e10458277ad5bc8154ef07d304b30c4606822ce))
+
+
+### Build
+
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 2 updates ([e62cd3b](https://github.com/MeSeeFoo/argus-quant-engine/commit/e62cd3b3fe455ea2a958f5f572f01f71b409ed07))
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 2 updates ([256b569](https://github.com/MeSeeFoo/argus-quant-engine/commit/256b56913405e5f9ccb6b57337128d094cf53889))
+* store mvnw.cmd with LF line endings again ([#32](https://github.com/MeSeeFoo/argus-quant-engine/issues/32)) ([489baca](https://github.com/MeSeeFoo/argus-quant-engine/commit/489baca39b14c2de3b827c04785dd95eb7a8c86a))
+
+
+### Continuous integration
+
+* check that files keep the line endings set in .gitattributes ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([ef00d65](https://github.com/MeSeeFoo/argus-quant-engine/commit/ef00d6574d8ac94a3d4ebe47bab03df44baec62b))
+* check that files keep the line endings set in .gitattributes ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([71cb534](https://github.com/MeSeeFoo/argus-quant-engine/commit/71cb534e6f66468ca333a78ad8fe6921c0a4372e))
+* require the line endings check on main ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([acae894](https://github.com/MeSeeFoo/argus-quant-engine/commit/acae894dede0858a3b73ff4be7fd7f5d5138467c))
+
 ## 0.1.0 (2026-10-16)
 
 
