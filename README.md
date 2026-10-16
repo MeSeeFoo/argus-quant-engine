@@ -382,6 +382,12 @@ Key design decisions are recorded as ADRs in [`docs/adr`](docs/adr).
 
 ---
 
+## 🤝 Contributing
+
+Every change starts from an issue and reaches `main` through a pull request. Branch names, commit messages, the branching model (trunk-based, no `develop` branch) and the Definition of Done are described in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+---
+
 ## 📄 License
 
 See [LICENSE](LICENSE).
