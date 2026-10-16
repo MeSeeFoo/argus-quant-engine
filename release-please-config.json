@@ -3,6 +3,7 @@
   "packages": {
     ".": {
       "release-type": "maven",
+      "initial-version": "0.1.0",
       "package-name": "argus-quant-engine",
       "skip-snapshot": true,
       "bump-minor-pre-major": true,
