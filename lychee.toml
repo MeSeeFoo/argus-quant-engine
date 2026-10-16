@@ -1,0 +1,5 @@
+# Link checker settings, shared by pr-checks.yml (internal links, --offline)
+# and nightly.yml (every link). See docs/ci.md.
+include_fragments = "full"
+exclude_path = ["(^|/)target/"]
+no_progress = true
