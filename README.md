@@ -300,7 +300,7 @@ GitHub Actions workflows, organised by responsibility:
 | Workflow | Runs on | Purpose |
 | :--- | :--- | :--- |
 | `ci.yml` | Pull request, push to `main`, manual | Build, tests, coverage, static analysis, SonarQube quality gate, Compose smoke test |
-| `pr-checks.yml` | Pull request | Conventions, new vulnerable dependencies, internal links, workflow lint, Protobuf breaking changes |
+| `pr-checks.yml` | Pull request | Conventions, new vulnerable dependencies, internal links, line endings, workflow lint, Protobuf breaking changes |
 | `release.yml` | Push to `main` | Release pull request, tag, GitHub Release with SBOM |
 | `nightly.yml` | Every night, manual | Windows build, every link, known vulnerabilities |
 | CodeQL | Pull request, push to `main`, weekly | Security analysis |
