@@ -35,7 +35,7 @@ jobs:
 
       - name: Build, test and check formatting, coverage and static analysis
         shell: pwsh
-        run: .mvnw.cmd --batch-mode --no-transfer-progress verify
+        run: .\mvnw.cmd --batch-mode --no-transfer-progress verify
 
   external-links:
     name: All links
