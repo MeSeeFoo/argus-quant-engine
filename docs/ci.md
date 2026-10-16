@@ -117,6 +117,10 @@ Uses [release-please](https://github.com/googleapis/release-please), configured 
 - Merging the release pull request creates the tag `vX.Y.Z` and the GitHub Release, and a second job attaches the SBOM of the Maven build (CycloneDX, `argus-sbom.json` and `argus-sbom.xml`).
 - `pom.xml` versions are plain release versions (`0.2.0`): there are no `-SNAPSHOT` pull requests after a release.
 
+- The first release is `0.1.0` (`initial-version` in the configuration).
+
+release-please opens pull requests with the workflow token, which the repository must allow: *Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests*. Without it, `release.yml` fails with "GitHub Actions is not permitted to create or approve pull requests". The ruleset requires no approvals, so the approval part of that setting grants nothing extra.
+
 > [!IMPORTANT]
 > GitHub does not run workflows on pull requests opened with the workflows' own token, so the release pull request starts **without checks** and cannot be merged while they are required. **Close and reopen it**: that runs the checks, and it can be merged once they are green.
 
