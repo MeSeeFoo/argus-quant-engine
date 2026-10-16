@@ -5,7 +5,7 @@ Argus uses GitHub Actions. Workflows are organised **by responsibility**: each f
 | Workflow | Runs on | Purpose |
 | :--- | :--- | :--- |
 | [`ci.yml`](../.github/workflows/ci.yml) | Pull request, push to `main`, manual | Build, tests, coverage, static analysis, quality gate, Compose smoke test |
-| [`pr-checks.yml`](../.github/workflows/pr-checks.yml) | Pull request | Conventions, new vulnerable dependencies, internal links, workflow lint, Protobuf breaking changes |
+| [`pr-checks.yml`](../.github/workflows/pr-checks.yml) | Pull request | Conventions, new vulnerable dependencies, internal links, line endings, workflow lint, Protobuf breaking changes |
 | [`release.yml`](../.github/workflows/release.yml) | Push to `main` | Release pull request, tag, GitHub Release with SBOM |
 | [`nightly.yml`](../.github/workflows/nightly.yml) | Every night, manual | Windows build, every link, known vulnerabilities |
 | CodeQL (GitHub default setup) | Pull request, push to `main`, weekly | Security analysis of the Java code and the workflows |
@@ -105,6 +105,7 @@ Creates `.env` from `.env.example` and runs `docker compose up -d --wait` in `in
 | **Conventions** | The title follows Conventional Commits and ends with the issue, for example `feat(build): add parent POM (#1)`. The branch is `<type>/<issue>-<slug>`. Skipped for Dependabot and release-please pull requests. Editing the title runs the check again. |
 | **Dependency review** | The pull request does not add a dependency with a known vulnerability of moderate severity or higher. |
 | **Internal links** | Links between Markdown files, including `#anchors`, with [lychee](https://lychee.cli.rs/) in offline mode. External links are checked by `nightly.yml`, because a website that is down must not block a pull request. Settings in [`lychee.toml`](../lychee.toml), exclusions in [`.lycheeignore`](../.lycheeignore). |
+| **Line endings** | Every file is stored with the line endings set in [`.gitattributes`](../.gitattributes): LF in the repository, converted to CRLF on checkout only for `.cmd` and `.bat` files. Some tools, Dependabot among them, commit CRLF, and Git then shows those files as modified on every checkout. To fix it, run `git add --renormalize .` and commit the result. |
 | **Workflow lint** | [actionlint](https://github.com/rhysd/actionlint) (syntax and types of the workflows) and [zizmor](https://docs.zizmor.sh/) (security: unpinned actions, template injection, excessive permissions…). |
 | **Protobuf contracts** | `buf lint`, `buf format` and `buf breaking` against the target branch, with the rules in [`buf.yaml`](../contracts/src/main/protobuf/buf.yaml). See [Evolving the schemas](../contracts/README.md#evolving-the-schemas). |
 
@@ -151,7 +152,7 @@ GitHub disables scheduled workflows in public repositories after 60 days without
 A repository ruleset on `main` requires:
 
 - A pull request for every change; direct pushes, force pushes and deleting the branch are rejected.
-- These checks green: `Build and test`, `Compose smoke test`, `Conventions`, `Dependency review`, `Internal links`, `Workflow lint`, `Protobuf contracts` and CodeQL.
+- These checks green: `Build and test`, `Compose smoke test`, `Conventions`, `Dependency review`, `Internal links`, `Line endings`, `Workflow lint`, `Protobuf contracts` and CodeQL.
 - The branch up to date with `main` before merging.
 - Merge commits only (no squash, no rebase), so every commit stays visible in `main`.
 
@@ -172,6 +173,7 @@ A new required check must be added to the ruleset by name (the job's `name:`), a
 | Coverage report | `target/site/jacoco/index.html` in each module, after `verify` |
 | Compose smoke test | `docker compose up -d --wait` in `infra/docker` |
 | Protobuf contracts | `buf lint && buf breaking --against '../../../../.git#branch=main,subdir=contracts/src/main/protobuf'` in `contracts/src/main/protobuf` |
+| Line endings | `git add --renormalize . && git diff --cached --stat` (lists the files to fix; `git reset` to unstage) |
 | Links | `lychee --offline './**/*.md'` (add no flag to check external links too) |
 | Workflows | `actionlint` and `zizmor .github` |
 | Vulnerabilities | `osv-scanner scan source -r .` |
