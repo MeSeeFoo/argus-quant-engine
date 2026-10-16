@@ -151,7 +151,13 @@ A repository ruleset on `main` requires:
 - The branch up to date with `main` before merging.
 - Merge commits only (no squash, no rebase), so every commit stays visible in `main`.
 
-If an external service is down (for example SonarQube Cloud), an administrator can remove its check from the ruleset temporarily (*Settings → Rules → Rulesets*).
+The ruleset lives in the repository settings; [`.github/rulesets/protect-main.json`](../.github/rulesets/protect-main.json) keeps a copy so that changes are reviewed like code. After changing the file, apply it with:
+
+```bash
+gh api -X PUT repos/MeSeeFoo/argus-quant-engine/rulesets/25230975 --input .github/rulesets/protect-main.json
+```
+
+A new required check must be added to the ruleset by name (the job's `name:`), after it has run at least once. If an external service is down (for example SonarQube Cloud), an administrator can remove its check from the ruleset temporarily (*Settings → Rules → Rulesets*).
 
 ## Running the checks locally
 
