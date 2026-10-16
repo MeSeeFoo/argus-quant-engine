@@ -30,6 +30,7 @@
           { "context": "Conventions", "integration_id": 15368 },
           { "context": "Dependency review", "integration_id": 15368 },
           { "context": "Internal links", "integration_id": 15368 },
+          { "context": "Line endings", "integration_id": 15368 },
           { "context": "Workflow lint", "integration_id": 15368 },
           { "context": "Protobuf contracts", "integration_id": 15368 }
         ]

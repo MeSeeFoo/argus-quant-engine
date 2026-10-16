@@ -74,6 +74,26 @@ jobs:
         with:
           args: --offline './**/*.md'
 
+  line-endings:
+    name: Line endings
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Tools (Dependabot among them) sometimes commit CRLF line endings, so Git reports
+      # those files as modified on every checkout. Renormalizing must change nothing.
+      - name: Files are stored as .gitattributes says
+        run: |
+          git add --renormalize .
+          if ! git diff --cached --quiet; then
+            echo "::error title=Line endings::These files are not stored with the line endings set in .gitattributes. Run 'git add --renormalize .' and commit the result."
+            git diff --cached --stat
+            exit 1
+          fi
+
   workflows:
     name: Workflow lint
     runs-on: ubuntu-latest
