@@ -287,6 +287,7 @@ Notes on the build:
 - **One parent POM.** Every dependency and plugin version is declared in the root [`pom.xml`](pom.xml). Modules declare dependencies without a version.
 - **Toolchain checks.** The Maven Enforcer plugin fails the build with a clear message on Java older than 25 or Maven older than 3.9.
 - **Formatting is enforced.** `verify` runs `spotless:check` and fails on unformatted code; run `spotless:apply` to fix it.
+- **Coverage thresholds.** JaCoCo measures the tests of every module and `verify` fails below 80 % of lines or 70 % of branches (properties `coverage.line.minimum` and `coverage.branch.minimum`). Generated code (SBE codecs, Protobuf messages) is excluded. The report is in `target/site/jacoco/index.html` of each module.
 - **Agrona needs a JVM flag.** On Java 25, every JVM that loads Agrona (SBE codecs, Aeron) must start with `--add-exports java.base/jdk.internal.misc=ALL-UNNAMED`. The build passes it to tests through the `agrona.jvm.args` property; services must pass it at runtime.
 
 ### Continuous integration
