@@ -295,10 +295,17 @@ Notes on the build:
 
 ### Continuous integration
 
-GitHub Actions runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push to `main` and on every pull request, with two jobs:
+GitHub Actions workflows, organised by responsibility:
 
-- **Build and test:** `./mvnw verify` on Linux with JDK 25 (Temurin), with the Maven repository cached between runs. A failing test, a broken architecture rule or unformatted code fails the job. The JUnit results are published as a *Test report* check on the pull request, with failing tests annotated on the code.
-- **Compose smoke test:** creates `.env` from `.env.example` and runs `docker compose up -d --wait` in `infra/docker`, so it fails if any container does not become healthy within five minutes. The container logs are printed when it fails.
+| Workflow | Runs on | Purpose |
+| :--- | :--- | :--- |
+| `ci.yml` | Pull request, push to `main`, manual | Build, tests, coverage, static analysis, SonarQube quality gate, Compose smoke test |
+| `pr-checks.yml` | Pull request | Conventions, new vulnerable dependencies, internal links, workflow lint, Protobuf breaking changes |
+| `release.yml` | Push to `main` | Release pull request, tag, GitHub Release with SBOM |
+| `nightly.yml` | Every night, manual | Windows build, every link, known vulnerabilities |
+| CodeQL | Pull request, push to `main`, weekly | Security analysis |
+
+`main` only accepts pull requests whose required checks are green. [`docs/ci.md`](docs/ci.md) describes every check, when it runs, how to run a workflow by hand on a branch, how releases work, and how to run each check locally.
 
 ---
 
