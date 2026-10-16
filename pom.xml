@@ -48,7 +48,7 @@
         <coverage.branch.minimum>0.70</coverage.branch.minimum>
         <!-- SonarQube Cloud (run by CI with ./mvnw sonar:sonar). It reads the JaCoCo reports. -->
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <sonar.organization>meseefoo</sonar.organization>
+        <sonar.organization>argus-quant-engine</sonar.organization>
         <sonar.projectKey>MeSeeFoo_argus-quant-engine</sonar.projectKey>
         <sonar.exclusions>**/target/generated-sources/**</sonar.exclusions>
 

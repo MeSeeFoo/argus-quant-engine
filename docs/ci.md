@@ -88,7 +88,7 @@ The analysis needs the `SONAR_TOKEN` secret. Without it (pull requests from fork
 <details>
 <summary>One-time setup of SonarQube Cloud</summary>
 
-1. Sign in to [sonarcloud.io](https://sonarcloud.io) with GitHub and import the organisation `MeSeeFoo` (key `meseefoo`) and the repository. The project key must be `MeSeeFoo_argus-quant-engine`; both keys are set in the root `pom.xml`.
+1. Sign in to [sonarcloud.io](https://sonarcloud.io) with GitHub and import the GitHub account `MeSeeFoo` and the repository. The organisation key is `argus-quant-engine` and the project key `MeSeeFoo_argus-quant-engine`; both are set in the root `pom.xml` (`sonar.organization`, `sonar.projectKey`) and must match the keys shown in SonarQube Cloud.
 2. In the project, *Administration → Analysis Method*: turn **off** *Automatic Analysis* (CI runs the analysis).
 3. *My Account → Security*: generate a token, and save it in GitHub as the repository secret `SONAR_TOKEN` (*Settings → Secrets and variables → Actions*).
 
