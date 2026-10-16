@@ -1,6 +1,8 @@
 # Argus Quant Engine
 
 [![CI](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MeSeeFoo/argus-quant-engine/actions/workflows/ci.yml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
 
 > **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed Python rules, a quant research lab, and a cloud-native deployment on AWS.**
 

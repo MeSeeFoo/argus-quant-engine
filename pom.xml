@@ -46,6 +46,11 @@
         <!-- Coverage thresholds, checked by ./mvnw verify in every module with hand-written code -->
         <coverage.line.minimum>0.80</coverage.line.minimum>
         <coverage.branch.minimum>0.70</coverage.branch.minimum>
+        <!-- SonarQube Cloud (run by CI with ./mvnw sonar:sonar). It reads the JaCoCo reports. -->
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>meseefoo</sonar.organization>
+        <sonar.projectKey>MeSeeFoo_argus-quant-engine</sonar.projectKey>
+        <sonar.exclusions>**/target/generated-sources/**</sonar.exclusions>
 
         <!-- Dependencies: the only place where versions are declared -->
         <spring-boot.version>4.1.1</spring-boot.version>
@@ -70,6 +75,7 @@
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
         <error-prone.version>2.50.0</error-prone.version>
         <nullaway.version>0.14.2</nullaway.version>
+        <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
         <!-- 1.37.0 is not yet supported by Spotless 3.10.x -->
         <google-java-format.version>1.36.1</google-java-format.version>
@@ -243,6 +249,11 @@
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco-maven-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-maven-plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
