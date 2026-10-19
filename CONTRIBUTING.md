@@ -33,7 +33,7 @@ A `develop` branch (GitFlow) integrates work before it is stabilised and release
 - **`main` is always releasable.** The goal is continuous deployment to AWS: what is in `main` must build, pass every check and be ready to deploy. GitFlow is designed around scheduled releases with `release/*` and `hotfix/*` branches, which this project does not have.
 - **Progress stays visible in `main`.** Pull requests are merged with a merge commit, so every commit shows up in `main`. With `develop` in between, `main` would only show release merges.
 
-**When to reconsider.** A `develop` branch (or release branches) would make sense if Argus had to maintain several versions in production at the same time, or if a staging environment had to validate a batch of changes before they are released. If that happens, record the change as an ADR in `docs/adr` and update this guide.
+**When to reconsider.** A `develop` branch (or release branches) would make sense if Argus had to maintain several versions in production at the same time, or if a staging environment had to validate a batch of changes before they are released. If that happens, record the change as an ADR that supersedes [ADR 0013](docs/adr/0013-trunk-based-development-without-a-develop-branch.md) and update this guide.
 
 ## Issues
 
@@ -106,7 +106,7 @@ A task is done when:
 - [ ] `./mvnw verify` passes locally: build, tests, formatting, static analysis and coverage thresholds.
 - [ ] New behaviour is covered by tests; bugs get a test that fails without the fix.
 - [ ] Documentation reflects the change: README, `docs/`, module READMEs and comments where behaviour changed.
-- [ ] Significant design decisions are recorded as an ADR in `docs/adr`.
+- [ ] Significant design decisions are recorded as an ADR in [`docs/adr`](docs/adr/README.md).
 - [ ] No `TODO` without an issue number.
 - [ ] The pull request is merged with every required check green, the issue is closed and the branch is deleted.
 

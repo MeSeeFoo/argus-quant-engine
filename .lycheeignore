@@ -1,2 +1,1 @@
-# docs/adr is created by issue #11; remove this line then.
-/docs/adr$
+# Links that lychee must not check, one regular expression per line. See docs/ci.md.
