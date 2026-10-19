@@ -422,7 +422,7 @@ Partitions can only grow. If `topics.conf` asks for fewer partitions than a topi
 
 ## 🗺️ Roadmap
 
-- [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules, Architecture Decision Records.
+- [x] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules, Architecture Decision Records.
 - [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
 - [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA) → Kafka → data archiver → QuestDB.
 - [ ] **Phase 3: Python models & alerts.** GraalPy proof of concept, `argus-feed-player`, `argus-model-runtime` and the `argus` SDK, `Indicator` and `AlertRule`, multi-instrument models, sandbox limits and circuit breaker, the PANIC button, notification dispatcher with Resilience4j.
