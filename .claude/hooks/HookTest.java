@@ -7,7 +7,8 @@ import java.util.List;
 /**
  * Runs every hook the way Claude Code does (a new JVM, the JSON input on stdin) and checks its
  * verdict. Run it from the repository root with {@code java .claude/hooks/HookTest.java}; CI runs
- * it on Linux and Windows.
+ * it on Linux and Windows. Like the Stop hook it tests, it also formats any other Java file changed
+ * in the working tree.
  */
 public final class HookTest {
 
@@ -76,17 +77,19 @@ public final class HookTest {
     Path sample =
         Path.of("libs/architecture-rules/src/test/java/com/argus/architecture/HookTestSample.java")
             .toAbsolutePath();
+    Path root = Path.of("").toAbsolutePath();
     try {
       Files.writeString(
           sample, "package com.argus.architecture;\nclass HookTestSample {   int   x =1;  }\n");
-      expect("format a Java file", run("FormatJava", edit(sample), null), 0, "");
+      expect("format changed Java files", run("FormatJava", stop(root, false), null), 0, "");
       String formatted = Files.readString(sample);
       if (!formatted.equals(
           "package com.argus.architecture;\n\nclass HookTestSample {\n  int x = 1;\n}\n")) {
-        failures.add("format a Java file: unexpected result\n" + formatted);
+        failures.add("format changed Java files: unexpected result\n" + formatted);
       }
       Files.writeString(sample, "package com.argus.architecture;\nclass HookTestSample {\n");
-      expect("report a file that does not parse", run("FormatJava", edit(sample), null), 2, "");
+      expect("report a broken file", run("FormatJava", stop(root, false), null), 2, "");
+      expect("do not loop on that file", run("FormatJava", stop(root, true), null), 1, "");
     } finally {
       Files.deleteIfExists(sample);
     }
@@ -106,6 +109,14 @@ public final class HookTest {
     return "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":"
         + quote(command)
         + "},\"cwd\":"
+        + quote(cwd.toString())
+        + "}";
+  }
+
+  private static String stop(Path cwd, boolean stopHookActive) {
+    return "{\"hook_event_name\":\"Stop\",\"stop_hook_active\":"
+        + stopHookActive
+        + ",\"cwd\":"
         + quote(cwd.toString())
         + "}";
   }

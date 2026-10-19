@@ -5,9 +5,10 @@ import java.util.Optional;
 /**
  * The JSON that Claude Code sends a hook on stdin, read without any library.
  *
- * <p>Hooks only need a few top-level string fields of {@code tool_input} ({@code file_path},
- * {@code command}…). A field name is matched only where it starts a key, never inside another
- * string value, because a quote inside a JSON string is always escaped.
+ * <p>Hooks only need a few fields, each with a unique name: strings such as {@code file_path},
+ * {@code command} and {@code cwd}, and the {@code stop_hook_active} flag. A field name is matched
+ * only where it starts a key, never inside another string value, because a quote inside a JSON
+ * string is always escaped.
  */
 final class HookInput {
 
@@ -38,6 +39,21 @@ final class HookInput {
       }
     }
     return Optional.empty();
+  }
+
+  /** Whether the first boolean field with this name is {@code true}. */
+  boolean flag(String name) {
+    String key = "\"" + name + "\"";
+    for (int at = json.indexOf(key); at >= 0; at = json.indexOf(key, at + 1)) {
+      if (at > 0 && json.charAt(at - 1) == '\\') {
+        continue;
+      }
+      int i = skipSpaces(at + key.length());
+      if (i < json.length() && json.charAt(i) == ':') {
+        return json.startsWith("true", skipSpaces(i + 1));
+      }
+    }
+    return false;
   }
 
   private int skipSpaces(int i) {

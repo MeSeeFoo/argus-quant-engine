@@ -69,7 +69,7 @@ The [ADRs](docs/adr/README.md) are the source of truth for design. Read the rele
 
 | Hook | When | What it does |
 | :--- | :--- | :--- |
-| `FormatJava` | After a Java file is written or edited | Runs `spotless:apply` on that file only (a few seconds). A file that does not parse is reported back and left as it is. |
+| `FormatJava` | When Claude finishes a turn | Runs `spotless:apply` once on the Java files changed in the working tree, so `verify` never fails on formatting. Formatting once per turn avoids starting Maven after every edit. A file that does not parse is reported back to Claude to fix. |
 | `ProtectGeneratedCode` | Before a file is written or edited | Blocks edits under `target/` and `generated-sources/`, and points to the SBE or Protobuf schema to change instead. |
 | `GuardGitPush` | Before a `git` command in Bash or PowerShell | Blocks force-pushes (`--force`, `-f`, `+refspec`, `--mirror`), pushes to `main` and a bare `git push` while `main` is checked out. |
 
