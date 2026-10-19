@@ -30,7 +30,13 @@ class SchemaTest {
         Arguments.of("Trade", TradeEncoder.TEMPLATE_ID, TradeEncoder.BLOCK_LENGTH, 1, 85),
         Arguments.of(
             "BestBidAsk", BestBidAskEncoder.TEMPLATE_ID, BestBidAskEncoder.BLOCK_LENGTH, 2, 100),
-        Arguments.of("Signal", SignalEncoder.TEMPLATE_ID, SignalEncoder.BLOCK_LENGTH, 10, 91),
+        Arguments.of(
+            "IndicatorValue",
+            IndicatorValueEncoder.TEMPLATE_ID,
+            IndicatorValueEncoder.BLOCK_LENGTH,
+            11,
+            44),
+        Arguments.of("Alert", AlertEncoder.TEMPLATE_ID, AlertEncoder.BLOCK_LENGTH, 12, 45),
         Arguments.of(
             "Heartbeat", HeartbeatEncoder.TEMPLATE_ID, HeartbeatEncoder.BLOCK_LENGTH, 99, 16));
   }
@@ -64,17 +70,32 @@ class SchemaTest {
       BestBidAskEncoder.askQuantityEncodingOffset(),
       BestBidAskEncoder.exchangeTimestampEncodingOffset(),
       BestBidAskEncoder.receiveTimestampEncodingOffset(),
-      SignalEncoder.signalIdEncodingOffset(),
-      SignalEncoder.triggerSequenceEncodingOffset(),
-      SignalEncoder.strengthEncodingOffset(),
-      SignalEncoder.referencePriceEncodingOffset(),
-      SignalEncoder.triggerExchangeTimestampEncodingOffset(),
-      SignalEncoder.emitTimestampEncodingOffset(),
+      IndicatorValueEncoder.sequenceEncodingOffset(),
+      IndicatorValueEncoder.triggerSequenceEncodingOffset(),
+      IndicatorValueEncoder.triggerExchangeTimestampEncodingOffset(),
+      IndicatorValueEncoder.emitTimestampEncodingOffset(),
+      IndicatorValueEncoder.deploymentIdEncodingOffset(),
+      AlertEncoder.sequenceEncodingOffset(),
+      AlertEncoder.triggerSequenceEncodingOffset(),
+      AlertEncoder.triggerExchangeTimestampEncodingOffset(),
+      AlertEncoder.emitTimestampEncodingOffset(),
+      AlertEncoder.deploymentIdEncodingOffset(),
       HeartbeatEncoder.sequenceEncodingOffset(),
       HeartbeatEncoder.timestampEncodingOffset(),
     };
     for (int offset : offsets) {
       assertEquals(0, (MessageHeaderEncoder.ENCODED_LENGTH + offset) % 8, "offset " + offset);
     }
+  }
+
+  /** The values group comes first so that its doubles start 8-byte aligned. */
+  @Test
+  void indicatorValuesAreEightByteAligned() {
+    int firstValue =
+        MessageHeaderEncoder.ENCODED_LENGTH
+            + IndicatorValueEncoder.BLOCK_LENGTH
+            + IndicatorValueEncoder.ValuesEncoder.sbeHeaderSize();
+    assertEquals(0, firstValue % 8);
+    assertEquals(8, IndicatorValueEncoder.ValuesEncoder.sbeBlockLength());
   }
 }

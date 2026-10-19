@@ -14,14 +14,14 @@ final class Codecs {
 
   static final long MAX_INT64 = Long.MAX_VALUE;
 
+  /** Largest value of an SBE uint32; all bits set is reserved as the null value. */
+  static final long MAX_UINT32 = 0xFFFF_FFFEL;
+
   /** 65 432.10123456, a realistic BTCUSDT price at scale 1e-8. */
   static final long BTC_PRICE = 6_543_210_123_456L;
 
   /** 0.00000001, the smallest positive amount at scale 1e-8. */
   static final long ONE_UNIT = 1L;
-
-  /** 1.0 at scale 1e-8. */
-  static final long ONE = 100_000_000L;
 
   /** 2026-10-15T09:30:00.123456789Z. */
   static final long TIMESTAMP = 1_792_056_600_123_456_789L;

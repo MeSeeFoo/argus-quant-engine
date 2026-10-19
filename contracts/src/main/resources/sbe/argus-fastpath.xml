@@ -13,7 +13,7 @@
                    package="com.argus.contracts.sbe"
                    id="1"
                    version="0"
-                   semanticVersion="0.1.0"
+                   semanticVersion="0.2.0"
                    description="Argus fast-path contracts (Aeron)"
                    byteOrder="littleEndian">
 
@@ -23,6 +23,15 @@
             <type name="templateId" primitiveType="uint16"/>
             <type name="schemaId" primitiveType="uint16"/>
             <type name="version" primitiveType="uint16"/>
+        </composite>
+
+        <composite name="groupSizeEncoding" description="Header of a repeating group">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="numInGroup" primitiveType="uint16"/>
+        </composite>
+        <composite name="varStringEncoding" description="Variable-length UTF-8 string">
+            <type name="length" primitiveType="uint16"/>
+            <type name="varData" primitiveType="uint8" length="0" characterEncoding="UTF-8"/>
         </composite>
 
         <composite name="Decimal64" description="Fixed-point decimal: value = mantissa * 10^-8">
@@ -41,14 +50,14 @@
             <validValue name="BUY">1</validValue>
             <validValue name="SELL">2</validValue>
         </enum>
-        <enum name="Direction" encodingType="uint8" description="Position a signal recommends">
-            <validValue name="FLAT">0</validValue>
-            <validValue name="LONG">1</validValue>
-            <validValue name="SHORT">2</validValue>
+        <enum name="Severity" encodingType="uint8" description="Severity of an alert">
+            <validValue name="INFO">1</validValue>
+            <validValue name="WARNING">2</validValue>
+            <validValue name="CRITICAL">3</validValue>
         </enum>
     </types>
 
-    <!-- Market data: feed-gateway -> signal-engine -->
+    <!-- Market data: feed-gateway and feed-player -> model-engine -->
 
     <sbe:message name="Trade" id="1" description="An execution that happened on the venue">
         <field name="sequence" id="1" type="Sequence"/>
@@ -75,20 +84,40 @@
         <field name="symbol" id="10" type="Symbol"/>
     </sbe:message>
 
-    <!-- Signals: signal-engine -> fast-path consumers -->
+    <!--
+      Model outputs: model-engine -> fast-path consumers (ADR 0014).
+      Retired template ids, never to be reused: 10 (Signal, removed by ADR 0014).
+    -->
 
-    <sbe:message name="Signal" id="10" description="A rule's conclusion; a recommendation, not an order">
-        <field name="signalId" id="1" type="Sequence" description="Monotonic per engine; consumers use it for gap detection"/>
-        <field name="triggerSequence" id="2" type="Sequence" description="Sequence of the market event that triggered the rule"/>
-        <field name="strength" id="3" type="Decimal64" description="Confidence in [0, 1]"/>
-        <field name="referencePrice" id="4" type="Decimal64"/>
-        <field name="triggerExchangeTimestamp" id="5" type="EpochNanos"/>
-        <field name="emitTimestamp" id="6" type="EpochNanos"/>
-        <field name="ruleId" id="7" type="uint32"/>
-        <field name="ruleVersion" id="8" type="uint16"/>
-        <field name="direction" id="9" type="Direction"/>
-        <field name="venue" id="10" type="Venue"/>
-        <field name="symbol" id="11" type="Symbol"/>
+    <sbe:message name="IndicatorValue" id="11" description="Values computed by an Indicator deployment">
+        <field name="sequence" id="1" type="Sequence" description="Monotonic per publisher; consumers use it for gap detection"/>
+        <field name="triggerSequence" id="2" type="Sequence" description="Sequence of the input event that triggered the evaluation"/>
+        <field name="triggerExchangeTimestamp" id="3" type="EpochNanos" description="Event time of the triggering input"/>
+        <field name="emitTimestamp" id="4" type="EpochNanos" description="Time the engine published the value"/>
+        <field name="deploymentId" id="5" type="int64" description="Deployment that produced the value"/>
+        <field name="deploymentRevision" id="6" type="uint32" description="Revision of the deployment: model version and parameters"/>
+        <group name="values" id="7" dimensionType="groupSizeEncoding" description="One entry per output declared in ModelConfiguration, in order">
+            <field name="value" id="1" type="double" description="NaN while the model does not have enough data"/>
+        </group>
+        <group name="instruments" id="8" dimensionType="groupSizeEncoding" description="Instruments the value refers to, in slot order">
+            <field name="venue" id="1" type="Venue"/>
+            <field name="symbol" id="2" type="Symbol"/>
+        </group>
+    </sbe:message>
+
+    <sbe:message name="Alert" id="12" description="An alert raised by an AlertRule deployment">
+        <field name="sequence" id="1" type="Sequence" description="Monotonic per publisher; consumers use it for gap detection"/>
+        <field name="triggerSequence" id="2" type="Sequence" description="Sequence of the input event that triggered the evaluation"/>
+        <field name="triggerExchangeTimestamp" id="3" type="EpochNanos" description="Event time of the triggering input"/>
+        <field name="emitTimestamp" id="4" type="EpochNanos" description="Time the engine published the alert"/>
+        <field name="deploymentId" id="5" type="int64" description="Deployment that raised the alert"/>
+        <field name="deploymentRevision" id="6" type="uint32" description="Revision of the deployment: model version and parameters"/>
+        <field name="severity" id="7" type="Severity"/>
+        <group name="instruments" id="8" dimensionType="groupSizeEncoding" description="Instruments the alert refers to, in slot order">
+            <field name="venue" id="1" type="Venue"/>
+            <field name="symbol" id="2" type="Symbol"/>
+        </group>
+        <data name="message" id="9" type="varStringEncoding" description="Human-readable message, UTF-8"/>
     </sbe:message>
 
     <!-- Control -->

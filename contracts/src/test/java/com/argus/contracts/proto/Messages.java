@@ -18,9 +18,6 @@ final class Messages {
   /** 0.00000001, the smallest positive amount at scale 1e-8. */
   static final long ONE_UNIT = 1L;
 
-  /** 1.0 at scale 1e-8. */
-  static final long ONE = 100_000_000L;
-
   /** 2026-10-15T09:30:00.123456789Z. */
   static final long TIMESTAMP = 1_792_056_600_123_456_789L;
 
