@@ -35,3 +35,10 @@ ADRs are **immutable once accepted**. When a decision changes, write a new ADR a
 | [0011](0011-user-models-in-python-on-graalpy.md) | User models in Python, run in-process on GraalPy | Proposed |
 | [0012](0012-distribute-model-state-through-compacted-topics.md) | Distribute model state through compacted Kafka topics | Accepted |
 | [0013](0013-trunk-based-development-without-a-develop-branch.md) | Trunk-based development without a `develop` branch | Accepted |
+| [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) | One model engine for alert rules and indicators | Accepted |
+| [0015](0015-built-in-models-in-java-behind-the-same-contract.md) | Built-in models in Java, behind the same contract | Accepted |
+| [0016](0016-distribute-deployments-with-a-kafka-consumer-group.md) | Distribute deployments with a Kafka consumer group | Accepted |
+| [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted |
+| [0018](0018-output-policy-of-the-durable-path.md) | Output policy of the durable path | Accepted |
+| [0019](0019-a-global-panic-button-for-models.md) | A global PANIC button for models | Accepted |
+| [0020](0020-the-notification-dispatcher-only-notifies.md) | The notification dispatcher only notifies | Accepted |
