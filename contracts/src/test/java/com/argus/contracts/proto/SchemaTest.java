@@ -1,15 +1,14 @@
 package com.argus.contracts.proto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import com.argus.contracts.proto.alerts.v1.Alert;
+import com.argus.contracts.proto.alerts.v1.Severity;
+import com.argus.contracts.proto.indicators.v1.IndicatorValue;
 import com.argus.contracts.proto.market.quotes.v1.BestBidAsk;
 import com.argus.contracts.proto.market.trades.v1.Side;
 import com.argus.contracts.proto.market.trades.v1.Trade;
-import com.argus.contracts.proto.signals.v1.Direction;
-import com.argus.contracts.proto.signals.v1.Signal;
-import com.argus.contracts.sbe.BestBidAskEncoder;
-import com.argus.contracts.sbe.SignalEncoder;
-import com.argus.contracts.sbe.TradeEncoder;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.Descriptors.EnumDescriptor;
@@ -19,13 +18,22 @@ import com.google.protobuf.ProtocolMessageEnum;
 import com.google.protobuf.UnknownFieldSet;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * Guards the wire contract. A failure here means the schema changed in a way that consumers will
@@ -33,11 +41,25 @@ import org.junit.jupiter.params.provider.MethodSource;
  */
 class SchemaTest {
 
+  private static @Nullable Document sbeSchema;
+
+  @BeforeAll
+  static void readSbeSchema() throws Exception {
+    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+    factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+    factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+    try (InputStream schema = SchemaTest.class.getResourceAsStream("/sbe/argus-fastpath.xml")) {
+      assertNotNull(schema, "SBE schema on the classpath");
+      sbeSchema = factory.newDocumentBuilder().parse(schema);
+    }
+  }
+
   static Stream<Arguments> topics() {
     return Stream.of(
         Arguments.of("argus.market.trades.v1", Trade.getDescriptor()),
         Arguments.of("argus.market.quotes.v1", BestBidAsk.getDescriptor()),
-        Arguments.of("argus.signals.v1", Signal.getDescriptor()));
+        Arguments.of("argus.indicators.v1", IndicatorValue.getDescriptor()),
+        Arguments.of("argus.alerts.v1", Alert.getDescriptor()));
   }
 
   @ParameterizedTest(name = "{0}")
@@ -80,46 +102,62 @@ class SchemaTest {
   }
 
   @Test
-  void signalFieldsAreStable() {
+  void indicatorValueFieldsAreStable() {
     assertFields(
-        Signal.getDescriptor(),
-        "1 signal_id uint64",
+        IndicatorValue.getDescriptor(),
+        "1 sequence uint64",
         "2 trigger_sequence uint64",
-        "3 strength int64",
-        "4 reference_price int64",
-        "5 trigger_exchange_timestamp int64",
-        "6 emit_timestamp int64",
-        "7 rule_id uint32",
-        "8 rule_version uint32",
-        "9 direction enum",
-        "10 venue string",
-        "11 symbol string");
+        "3 trigger_exchange_timestamp int64",
+        "4 emit_timestamp int64",
+        "5 deployment_id int64",
+        "6 deployment_revision uint32",
+        "7 values repeated double",
+        "8 instruments repeated message");
+    assertFields(IndicatorValue.Instrument.getDescriptor(), "1 venue string", "2 symbol string");
+  }
+
+  @Test
+  void alertFieldsAreStable() {
+    assertFields(
+        Alert.getDescriptor(),
+        "1 sequence uint64",
+        "2 trigger_sequence uint64",
+        "3 trigger_exchange_timestamp int64",
+        "4 emit_timestamp int64",
+        "5 deployment_id int64",
+        "6 deployment_revision uint32",
+        "7 severity enum",
+        "8 instruments repeated message",
+        "9 message string");
+    assertFields(Alert.Instrument.getDescriptor(), "1 venue string", "2 symbol string");
   }
 
   @Test
   void enumValuesAreStable() {
     assertValues(Side.getDescriptor(), "0 SIDE_UNSPECIFIED", "1 SIDE_BUY", "2 SIDE_SELL");
     assertValues(
-        Direction.getDescriptor(),
-        "0 DIRECTION_UNSPECIFIED",
-        "1 DIRECTION_LONG",
-        "2 DIRECTION_SHORT",
-        "3 DIRECTION_FLAT");
+        Severity.getDescriptor(),
+        "0 SEVERITY_UNSPECIFIED",
+        "1 SEVERITY_INFO",
+        "2 SEVERITY_WARNING",
+        "3 SEVERITY_CRITICAL");
   }
 
   @Test
-  void fieldNumbersMatchTheSbeFieldIds() throws ReflectiveOperationException {
-    assertMatchesSbe(Trade.getDescriptor(), TradeEncoder.class);
-    assertMatchesSbe(BestBidAsk.getDescriptor(), BestBidAskEncoder.class);
-    assertMatchesSbe(Signal.getDescriptor(), SignalEncoder.class);
+  void fieldNumbersMatchTheSbeIds() {
+    assertMatchesSbe(Trade.getDescriptor(), sbeMessage("Trade"));
+    assertMatchesSbe(BestBidAsk.getDescriptor(), sbeMessage("BestBidAsk"));
+    assertMatchesSbe(IndicatorValue.getDescriptor(), sbeMessage("IndicatorValue"));
+    assertMatchesSbe(Alert.getDescriptor(), sbeMessage("Alert"));
   }
 
   @Test
   void enumValuesMatchTheSbeEnums() {
     assertSameValue(com.argus.contracts.sbe.Side.BUY.value(), Side.SIDE_BUY);
     assertSameValue(com.argus.contracts.sbe.Side.SELL.value(), Side.SIDE_SELL);
-    assertSameValue(com.argus.contracts.sbe.Direction.LONG.value(), Direction.DIRECTION_LONG);
-    assertSameValue(com.argus.contracts.sbe.Direction.SHORT.value(), Direction.DIRECTION_SHORT);
+    assertSameValue(com.argus.contracts.sbe.Severity.INFO.value(), Severity.SEVERITY_INFO);
+    assertSameValue(com.argus.contracts.sbe.Severity.WARNING.value(), Severity.SEVERITY_WARNING);
+    assertSameValue(com.argus.contracts.sbe.Severity.CRITICAL.value(), Severity.SEVERITY_CRITICAL);
   }
 
   @Test
@@ -159,7 +197,8 @@ class SchemaTest {
   }
 
   private static String typeName(FieldDescriptor field) {
-    return field.getType().name().toLowerCase(Locale.ROOT);
+    String type = field.getType().name().toLowerCase(Locale.ROOT);
+    return field.isRepeated() ? "repeated " + type : type;
   }
 
   private static void assertValues(EnumDescriptor type, String... expected) {
@@ -168,12 +207,41 @@ class SchemaTest {
     assertEquals(List.of(expected), actual, type.getFullName());
   }
 
-  private static void assertMatchesSbe(Descriptor message, Class<?> sbeEncoder)
-      throws ReflectiveOperationException {
-    for (FieldDescriptor field : message.getFields()) {
-      int sbeId = (int) sbeEncoder.getMethod(field.getJsonName() + "Id").invoke(null);
-      assertEquals(sbeId, field.getNumber(), message.getName() + "." + field.getName());
+  private static Element sbeMessage(String name) {
+    assertNotNull(sbeSchema);
+    NodeList messages = sbeSchema.getElementsByTagName("sbe:message");
+    for (int i = 0; i < messages.getLength(); i++) {
+      Element message = (Element) messages.item(i);
+      if (message.getAttribute("name").equals(name)) {
+        return message;
+      }
     }
+    throw new AssertionError("SBE message " + name + " not found");
+  }
+
+  /**
+   * Every Protobuf field number must be the id of the SBE field, group or data element with the
+   * same name. Nested messages are compared with the SBE group of the same field.
+   */
+  private static void assertMatchesSbe(Descriptor message, Element sbeElement) {
+    for (FieldDescriptor field : message.getFields()) {
+      Element sbeChild = sbeChild(sbeElement, field.getJsonName());
+      String where = message.getName() + "." + field.getName();
+      assertEquals(Integer.parseInt(sbeChild.getAttribute("id")), field.getNumber(), where);
+      if (field.getType() == FieldDescriptor.Type.MESSAGE) {
+        assertMatchesSbe(field.getMessageType(), sbeChild);
+      }
+    }
+  }
+
+  private static Element sbeChild(Element parent, String name) {
+    for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling()) {
+      if (node instanceof Element child && child.getAttribute("name").equals(name)) {
+        return child;
+      }
+    }
+    throw new AssertionError(
+        "no SBE element " + name + " in " + parent.getAttribute("name") + "; check the names");
   }
 
   private static void assertSameValue(short sbeValue, ProtocolMessageEnum protoValue) {

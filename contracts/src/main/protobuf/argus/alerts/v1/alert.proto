@@ -1,0 +1,52 @@
+// Topic argus.alerts.v1: alerts raised by AlertRule deployments, every one (ADR 0018).
+//
+// Mirrors the fast-path SBE Alert message: same fields, same field numbers (= SBE field, group
+// and data ids). Evolution rules: see contracts/README.md.
+syntax = "proto3";
+
+package argus.alerts.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "AlertProto";
+option java_package = "com.argus.contracts.proto.alerts.v1";
+
+// An alert raised by an AlertRule deployment. The notification dispatcher routes it to the
+// channels its owner configured.
+//
+// Kafka key: the deployment id in decimal (e.g. "42").
+message Alert {
+  // Monotonic per publisher, starts at 1; consumers use it for gap detection and deduplication.
+  uint64 sequence = 1;
+  // Sequence of the input event that triggered the evaluation.
+  uint64 trigger_sequence = 2;
+  // Event time of the triggering input, nanoseconds since the Unix epoch (UTC).
+  int64 trigger_exchange_timestamp = 3;
+  // Time the engine published the alert, nanoseconds since the Unix epoch (UTC).
+  int64 emit_timestamp = 4;
+  // Deployment that raised the alert.
+  int64 deployment_id = 5;
+  // Revision of the deployment: model version and parameters.
+  uint32 deployment_revision = 6;
+  // How urgent the alert is.
+  Severity severity = 7;
+  // Instruments the alert refers to, in slot order.
+  repeated Instrument instruments = 8;
+  // Human-readable message.
+  string message = 9;
+
+  // An instrument, as in the market data messages.
+  message Instrument {
+    // Uppercase venue code, at most 12 US-ASCII characters (e.g. "BINANCE").
+    string venue = 1;
+    // Symbol as the venue names it, uppercase, no separator, at most 24 US-ASCII characters (e.g. "BTCUSDT").
+    string symbol = 2;
+  }
+}
+
+// Severity of an alert. Non-zero values match the SBE Severity enum.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_INFO = 1;
+  SEVERITY_WARNING = 2;
+  SEVERITY_CRITICAL = 3;
+}

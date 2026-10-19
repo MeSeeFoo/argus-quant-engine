@@ -1,0 +1,44 @@
+// Topic argus.indicators.v1: values computed by Indicator deployments, conflated (ADR 0018).
+//
+// Mirrors the fast-path SBE IndicatorValue message: same fields, same field numbers (= SBE field
+// and group ids). Evolution rules: see contracts/README.md.
+syntax = "proto3";
+
+package argus.indicators.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "IndicatorValueProto";
+option java_package = "com.argus.contracts.proto.indicators.v1";
+
+// Values computed by an Indicator deployment (for example a VWAP or Bollinger bands).
+// On Kafka, the latest value per deployment and instrument is published at most once per
+// interval, and only if it changed; every value is on the fast path.
+//
+// Kafka key: the deployment id in decimal (e.g. "42").
+message IndicatorValue {
+  // Monotonic per publisher, starts at 1; consumers use it for gap detection.
+  uint64 sequence = 1;
+  // Sequence of the input event that triggered the evaluation.
+  uint64 trigger_sequence = 2;
+  // Event time of the triggering input, nanoseconds since the Unix epoch (UTC).
+  int64 trigger_exchange_timestamp = 3;
+  // Time the engine published the value, nanoseconds since the Unix epoch (UTC).
+  int64 emit_timestamp = 4;
+  // Deployment that produced the value.
+  int64 deployment_id = 5;
+  // Revision of the deployment: model version and parameters.
+  uint32 deployment_revision = 6;
+  // One entry per output declared in the model's ModelConfiguration, in order.
+  // NaN while the model does not have enough data.
+  repeated double values = 7;
+  // Instruments the value refers to, in slot order.
+  repeated Instrument instruments = 8;
+
+  // An instrument, as in the market data messages.
+  message Instrument {
+    // Uppercase venue code, at most 12 US-ASCII characters (e.g. "BINANCE").
+    string venue = 1;
+    // Symbol as the venue names it, uppercase, no separator, at most 24 US-ASCII characters (e.g. "BTCUSDT").
+    string symbol = 2;
+  }
+}

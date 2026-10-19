@@ -18,12 +18,15 @@ These are **our own canonical contracts**, not the exchange's. The feed gateway 
 
 | templateId | Message | Meaning | Route |
 | :--- | :--- | :--- | :--- |
-| 1 | `Trade` | An execution that happened on the venue: a buyer and a seller crossed at a price and quantity. It is a fact and is never corrected. | feed-gateway → signal-engine |
-| 2 | `BestBidAsk` | The current top of book: the best price someone is willing to buy at (bid) and sell at (ask), with their quantities. It is intent, not execution; each update replaces the previous one. | feed-gateway → signal-engine |
-| 10 | `Signal` | A rule's conclusion: be LONG, SHORT or FLAT on an instrument, with a strength. A recommendation, not an order. It points to the market event that triggered it. | signal-engine → fast-path consumers |
+| 1 | `Trade` | An execution that happened on the venue: a buyer and a seller crossed at a price and quantity. It is a fact and is never corrected. | feed-gateway, feed-player → model-engine |
+| 2 | `BestBidAsk` | The current top of book: the best price someone is willing to buy at (bid) and sell at (ask), with their quantities. It is intent, not execution; each update replaces the previous one. | feed-gateway, feed-player → model-engine |
+| 11 | `IndicatorValue` | The values an `Indicator` deployment computed (a VWAP, the three Bollinger bands…), for one or more instruments. | model-engine → fast-path consumers, other deployments |
+| 12 | `Alert` | An alert an `AlertRule` deployment raised, with a severity and a message. | model-engine → fast-path consumers |
 | 99 | `Heartbeat` | "Still alive" on an idle stream. Carries the last published sequence so receivers detect gaps even when nothing else arrives. | every fast-path stream |
 
-Volume is not a message of its own: a trade's `quantity` is its volume, and aggregated volume (candles, windows) is computed by the signal engine.
+Template id 10 belonged to `Signal`, removed by [ADR 0014](../docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md); it is never reused.
+
+Volume is not a message of its own: a trade's `quantity` is its volume, and aggregated volume (candles, windows) is computed by the model engine.
 
 ### Common types
 
@@ -35,9 +38,13 @@ Volume is not a message of its own: a trade's `quantity` is its volume, and aggr
 | `Symbol` | `char[24]`, US-ASCII | As the venue names it, uppercase, no separator, null-padded (`BTCUSDT`). |
 | `Venue` | `char[12]`, US-ASCII | Uppercase venue code, null-padded (`BINANCE`). |
 | `Side` | `uint8` enum | Aggressor side of a trade: `BUY`, `SELL`. |
-| `Direction` | `uint8` enum | `FLAT`, `LONG`, `SHORT`. |
+| `Severity` | `uint8` enum | Severity of an alert: `INFO`, `WARNING`, `CRITICAL`. |
+| `groupSizeEncoding` | `uint16` block length + `uint16` count | Header of a repeating group. |
+| `varStringEncoding` | `uint16` length + UTF-8 bytes | Variable-length text, after every group. |
 
-Symbol and venue are strings so that users can refer to instruments directly in rules and indicators (`"BINANCE:BTCUSDT"`), without an id catalogue. They are fixed-length, so messages keep a fixed size and can be read without allocating: compare the bytes instead of building a `String`. A value that does not fit is rejected (`IndexOutOfBoundsException`), never truncated.
+Market data uses `Decimal64`; values computed by models (`IndicatorValue`) use `double`, because a z-score or a correlation does not fit a fixed scale of 10⁻⁸. `NaN` means the model does not have enough data yet.
+
+Symbol and venue are strings so that users can refer to instruments directly in models (`"BINANCE:BTCUSDT"`), without an id catalogue. They are fixed-length, so messages keep a fixed size and can be read without allocating: compare the bytes instead of building a `String`. A value that does not fit is rejected (`IndexOutOfBoundsException`), never truncated.
 
 ### Fields
 
@@ -74,21 +81,36 @@ Fields are ordered from 8 to 1 bytes, with the char arrays last, so every 64-bit
 
 Mid price and spread are derived values and are computed by the engine.
 
-**`Signal`** (91 bytes)
+**`IndicatorValue`** (44 bytes + groups)
 
 | Offset | Field | Type | Meaning |
 | --: | :--- | :--- | :--- |
-| 0 | `signalId` | `Sequence` | Monotonic per engine; consumers use it for gap detection |
-| 8 | `triggerSequence` | `Sequence` | `sequence` of the market event that triggered the rule |
-| 16 | `strength` | `Decimal64` | Confidence in [0, 1]; the direction is a separate field |
-| 24 | `referencePrice` | `Decimal64` | Price the rule looked at (usually last trade or mid) |
-| 32 | `triggerExchangeTimestamp` | `EpochNanos` | `exchangeTimestamp` of the triggering event |
-| 40 | `emitTimestamp` | `EpochNanos` | Time the engine published the signal |
-| 48 | `ruleId` | `uint32` | Rule id |
-| 52 | `ruleVersion` | `uint16` | Rule version that produced the signal |
-| 54 | `direction` | `Direction` | Recommended position |
-| 55 | `venue` | `Venue` | |
-| 67 | `symbol` | `Symbol` | |
+| 0 | `sequence` | `Sequence` | Monotonic per publisher; consumers use it for gap detection |
+| 8 | `triggerSequence` | `Sequence` | `sequence` of the input event that triggered the evaluation |
+| 16 | `triggerExchangeTimestamp` | `EpochNanos` | Event time of the triggering input |
+| 24 | `emitTimestamp` | `EpochNanos` | Time the engine published the value |
+| 32 | `deploymentId` | `int64` | Deployment that produced the value |
+| 40 | `deploymentRevision` | `uint32` | Revision of the deployment (model version and parameters) |
+| group 7 | `values` | `double` per entry | One entry per output declared in `ModelConfiguration`, in order |
+| group 8 | `instruments` | `venue` + `symbol` per entry | Instruments the value refers to, in slot order |
+
+`values` comes first so that its doubles start 8-byte aligned (8 + 44 + 4 = 56); `SchemaTest` checks it.
+
+**`Alert`** (45 bytes + group + text)
+
+| Offset | Field | Type | Meaning |
+| --: | :--- | :--- | :--- |
+| 0 | `sequence` | `Sequence` | Monotonic per publisher; consumers use it for gap detection and deduplication |
+| 8 | `triggerSequence` | `Sequence` | `sequence` of the input event that triggered the evaluation |
+| 16 | `triggerExchangeTimestamp` | `EpochNanos` | Event time of the triggering input |
+| 24 | `emitTimestamp` | `EpochNanos` | Time the engine published the alert |
+| 32 | `deploymentId` | `int64` | Deployment that raised the alert |
+| 40 | `deploymentRevision` | `uint32` | Revision of the deployment (model version and parameters) |
+| 44 | `severity` | `Severity` | How urgent the alert is |
+| group 8 | `instruments` | `venue` + `symbol` per entry | Instruments the alert refers to, in slot order |
+| data 9 | `message` | `varStringEncoding` | Human-readable message |
+
+Groups and text must be written and read in this order, after the fixed fields. The deployment revision traces every output back to the exact code and parameters that produced it.
 
 **`Heartbeat`** (16 bytes)
 
@@ -107,9 +129,10 @@ SBE decoders read old and new messages as long as the change is additive. The ru
 
 1. **Add a field:** append it at the end of the message with `sinceVersion="N"` and bump the schema `version` to `N`. Older decoders skip it thanks to `blockLength`; newer decoders see the null value when reading an older message.
 2. **Add a message:** give it a new `templateId`. Consumers ignore template ids they do not know.
-3. **Breaking change** (removing, renaming the type of, or reordering a field, or changing a `Decimal64` exponent): create a new schema `id` and run both schemas side by side during the migration.
+3. **Retire a message:** delete it and record its `templateId` as retired in the schema; it is never reused. The other messages are not affected.
+4. **Breaking change** (removing, renaming the type of, or reordering a field, or changing a `Decimal64` exponent): create a new schema `id` and run both schemas side by side during the migration.
 
-[`SchemaTest`](src/test/java/com/argus/contracts/sbe/SchemaTest.java) pins the schema id, version, template ids and block lengths. If it fails, the wire contract changed: check these rules before updating the expected values.
+[`SchemaTest`](src/test/java/com/argus/contracts/sbe/SchemaTest.java) pins the schema id, version, template ids, block lengths and the alignment of 64-bit fields. If it fails, the wire contract changed: check these rules before updating the expected values.
 
 ### Usage
 
@@ -133,7 +156,8 @@ Each topic is meant to be registered in Apicurio as its own artifact once the re
 - **Self-contained files.** No file imports another, so each topic registers in Apicurio without schema references. An enum lives next to the only message that uses it.
 - **Java package:** `com.argus.contracts.proto.` + the Protobuf package (`com.argus.contracts.proto.market.trades.v1`), with `java_multiple_files`: every message and enum is a top-level class.
 - **Names:** `lower_snake_case` fields, `PascalCase` messages and enums, enum values prefixed with the enum name (`SIDE_BUY`), and value `0` reserved for `*_UNSPECIFIED`.
-- **Kafka key:** `VENUE:SYMBOL` (`BINANCE:BTCUSDT`), so all events of an instrument land on the same partition and stay in order.
+- **Kafka key:** `VENUE:SYMBOL` (`BINANCE:BTCUSDT`) for market data, so all events of an instrument land on the same partition and stay in order; the deployment id in decimal (`42`) for model outputs, so the outputs of a deployment stay in order.
+- **Nested messages** are allowed for the entries of a repeated field (`IndicatorValue.Instrument`); each file still has one top-level message.
 
 ### Same criteria as the fast path
 
@@ -149,15 +173,16 @@ A Kafka message carries the same values as its SBE counterpart: the publisher co
 
 Protobuf does not enforce the length limits: the strings come from SBE messages, where they are enforced. `google.protobuf.Timestamp` and decimal wrapper messages are avoided on purpose: they would need imports, cost bytes, and break the 1:1 mapping with SBE.
 
-`Trade`, `BestBidAsk` and `Signal` mirror their SBE messages field by field, and **their field numbers are the SBE field ids**. Enum values match SBE too, except `Direction.FLAT`: SBE uses `0` for it, but Protobuf reserves `0` for "not set", so it is `DIRECTION_FLAT = 3`.
+Every message mirrors its SBE counterpart field by field, and **its field numbers are the SBE field, group and data ids** (repeated fields map to SBE groups). Enum values match SBE too. `double` is `double` in both.
 
 ### Messages
 
 | Topic | Message | Meaning | Route |
 | :--- | :--- | :--- | :--- |
-| `argus.market.trades.v1` | `Trade` | Same as the SBE `Trade`: an execution on the venue, never corrected. | signal-engine → market-archiver |
-| `argus.market.quotes.v1` | `BestBidAsk` | Same as the SBE `BestBidAsk`: the top of book, intent rather than execution; each update replaces the previous one. | signal-engine → market-archiver |
-| `argus.signals.v1` | `Signal` | Same as the SBE `Signal`: a rule's recommendation, not an order. | signal-engine → market-archiver, api |
+| `argus.market.trades.v1` | `Trade` | Same as the SBE `Trade`: an execution on the venue, never corrected. | model-engine → data-archiver, bff |
+| `argus.market.quotes.v1` | `BestBidAsk` | Same as the SBE `BestBidAsk`: the top of book, intent rather than execution; each update replaces the previous one. | model-engine → data-archiver, bff |
+| `argus.indicators.v1` | `IndicatorValue` | Same as the SBE `IndicatorValue`, **conflated**: the latest value per deployment and instrument, at most once per interval and only if it changed ([ADR 0018](../docs/adr/0018-output-policy-of-the-durable-path.md)). | model-engine → data-archiver, bff |
+| `argus.alerts.v1` | `Alert` | Same as the SBE `Alert`: every alert. | model-engine → notification-dispatcher, data-archiver, bff |
 
 `Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
 
@@ -192,21 +217,32 @@ The market topics carry **every tick, never aggregated**: there is no candle top
 | 9 | `venue` | `string` | |
 | 10 | `symbol` | `string` | |
 
-**`Signal`**
+**`IndicatorValue`**
 
 | # | Field | Type | Meaning |
 | --: | :--- | :--- | :--- |
-| 1 | `signal_id` | `uint64` | Monotonic per engine |
-| 2 | `trigger_sequence` | `uint64` | Sequence of the triggering market event |
-| 3 | `strength` | decimal | Confidence in [0, 1] |
-| 4 | `reference_price` | decimal | Price the rule looked at |
-| 5 | `trigger_exchange_timestamp` | timestamp | Exchange time of the triggering event |
-| 6 | `emit_timestamp` | timestamp | Time the engine published the signal |
-| 7 | `rule_id` | `uint32` | Rule id |
-| 8 | `rule_version` | `uint32` | Rule version (`uint16` in SBE; Protobuf has no 16-bit type) |
-| 9 | `direction` | `Direction` | `DIRECTION_LONG = 1`, `DIRECTION_SHORT = 2`, `DIRECTION_FLAT = 3` |
-| 10 | `venue` | `string` | |
-| 11 | `symbol` | `string` | |
+| 1 | `sequence` | `uint64` | Monotonic per publisher |
+| 2 | `trigger_sequence` | `uint64` | Sequence of the triggering input event |
+| 3 | `trigger_exchange_timestamp` | timestamp | Event time of the triggering input |
+| 4 | `emit_timestamp` | timestamp | Time the engine published the value |
+| 5 | `deployment_id` | `int64` | Deployment that produced the value |
+| 6 | `deployment_revision` | `uint32` | Revision of the deployment |
+| 7 | `values` | `repeated double` | Outputs in the order declared in `ModelConfiguration`; `NaN` while warming up |
+| 8 | `instruments` | `repeated Instrument` | `venue` (1) and `symbol` (2), in slot order |
+
+**`Alert`**
+
+| # | Field | Type | Meaning |
+| --: | :--- | :--- | :--- |
+| 1 | `sequence` | `uint64` | Monotonic per publisher; the notification dispatcher deduplicates with it |
+| 2 | `trigger_sequence` | `uint64` | Sequence of the triggering input event |
+| 3 | `trigger_exchange_timestamp` | timestamp | Event time of the triggering input |
+| 4 | `emit_timestamp` | timestamp | Time the engine published the alert |
+| 5 | `deployment_id` | `int64` | Deployment that raised the alert |
+| 6 | `deployment_revision` | `uint32` | Revision of the deployment |
+| 7 | `severity` | `Severity` | `SEVERITY_INFO = 1`, `SEVERITY_WARNING = 2`, `SEVERITY_CRITICAL = 3` |
+| 8 | `instruments` | `repeated Instrument` | `venue` (1) and `symbol` (2), in slot order |
+| 9 | `message` | `string` | Human-readable message |
 
 In proto3 a field equal to its default (`0`, `""`, `*_UNSPECIFIED`) is not written and cannot be told apart from a missing one. Every field is mandatory in `v1`, so a consumer that reads `*_UNSPECIFIED` has received an invalid message.
 
@@ -229,6 +265,6 @@ Not allowed in `v1`, because they break consumers:
 
 A breaking change means a **new topic** (`argus.market.trades.v2`) with a new package and file. Producers publish to both topics during the migration, and `v1` is retired once no consumer reads it.
 
-[`SchemaTest`](src/test/java/com/argus/contracts/proto/SchemaTest.java) pins the package of each topic, every field number, name and type, the enum values, and the ids shared with SBE. It also checks that the current classes read a message written by a newer version. If it fails, the wire contract changed: check these rules before updating the expected values.
+[`SchemaTest`](src/test/java/com/argus/contracts/proto/SchemaTest.java) pins the package of each topic, every field number, name and type, the enum values, and checks every field number against the ids in the SBE schema. It also checks that the current classes read a message written by a newer version. If it fails, the wire contract changed: check these rules before updating the expected values.
 
 On every pull request, [`buf breaking`](https://buf.build/docs/breaking/) compares the schemas with the target branch using the rules in [`buf.yaml`](src/main/protobuf/buf.yaml), which match the list above, and fails the pull request on a breaking change. `buf lint` and `buf format` run in the same check.

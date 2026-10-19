@@ -13,7 +13,7 @@ REPLICATION=${REPLICATION_FACTOR:-1}
 BIN=/opt/kafka/bin
 
 # Every Kafka CLI call starts a JVM, so existing topics are described once.
-# Lines look like: "Topic: argus.rules.v1  TopicId: ...  PartitionCount: 1 ..."
+# Lines look like: "Topic: argus.models.v1  TopicId: ...  PartitionCount: 1 ..."
 existing=$("$BIN/kafka-topics.sh" --bootstrap-server "$BOOTSTRAP" --describe --exclude-internal \
   | sed -n 's/^Topic: *\([^[:space:]]*\).*PartitionCount: *\([0-9]*\).*/\1 \2/p')
 

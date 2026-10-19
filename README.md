@@ -4,36 +4,36 @@
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=MeSeeFoo_argus-quant-engine&metric=coverage)](https://sonarcloud.io/summary/new_code?id=MeSeeFoo_argus-quant-engine)
 
-> **Event-driven quantitative engine: real-time market data, low-latency signal generation, sandboxed Python rules, a quant research lab, and a cloud-native deployment on AWS.**
+> **Event-driven quantitative engine: real-time market data, low-latency indicators and alerts written by users in sandboxed Python, a quant research lab, and a cloud-native deployment on AWS.**
 
 > [!NOTE]
-> 🚧 **Status: design phase.** This README describes the target architecture. See the [Roadmap](#-roadmap) for what is built so far.
+> 🚧 **Status: design phase.** This README describes the target architecture. See the [Roadmap](#-roadmap) for what is built so far, and the [Architecture Decision Records](docs/adr/README.md) for why it looks the way it does.
 
 ---
 
 ## 📋 Overview
 
-**Argus Quant Engine** is a self-learning portfolio project that rebuilds, at small scale, the kind of pipelines found in Corporate & Investment Banking (CIB) trading platforms. It ingests live market data, computes indicators and evaluates quantitative rules in real time, and distributes the results through two paths: a **low-latency path** (Aeron) for trading consumers and a **durable path** (Kafka) for persistence, alerting and the UI.
+**Argus Quant Engine** is a self-learning portfolio project that rebuilds, at small scale, the kind of pipelines found in Corporate & Investment Banking (CIB) trading platforms. It ingests live market data, runs **models written by users in Python** (indicators and alert rules) in real time, and distributes their results through two paths: a **low-latency path** (Aeron) for trading consumers and a **durable path** (Kafka) for persistence, notifications and the UI.
 
 The project focuses on three engineering topics:
 
-1. **Low-latency design on the JVM:** single-threaded agents, zero-allocation hot paths, binary encoding (SBE) and shared-memory messaging (Aeron IPC).
+1. **Low-latency design on the JVM:** single-threaded agents, zero-allocation hot paths, binary encoding (SBE) and Aeron messaging.
 2. **Hexagonal architecture:** pure domain models with no framework dependencies, with the architecture rules enforced by tests.
-3. **Safe execution of user code:** trading rules are written by users in **Python** and run **inside the engine process** with GraalPy, isolated by the GraalVM Polyglot sandbox. Heavier research and model calibration happen offline in a separate Python lab with pandas and NumPy.
+3. **Safe execution of user code:** models are written by users in **Python**, loaded at runtime and run **inside the engine process** with GraalPy, isolated by the GraalVM Polyglot sandbox. Heavier research and model calibration happen offline in a separate Python lab with pandas and NumPy.
 
-The whole platform runs locally with Docker Compose and is deployed **end-to-end on AWS** with Terraform.
+The whole platform runs locally with Docker Compose and is deployed **end-to-end on AWS** (ECS on Fargate) with Terraform.
 
 ### Goals
 
 - Build an end-to-end pipeline that works, from the exchange feed to the dashboard.
 - Measure latency honestly (HdrHistogram, JMH) instead of claiming it.
-- Practise production concerns: schemas and contracts, observability, CI/CD, infrastructure as code.
+- Practise production concerns: schemas and contracts, high availability, observability, CI/CD, infrastructure as code, and the controls that regulation expects from an algorithmic trading platform.
 
 ### Non-goals
 
 - **No real order execution.** Trading consumers are simulated (paper trading).
-- It is not an Order Management System (OMS) and does not offer production-grade HA or disaster recovery.
-- No co-location or kernel-bypass networking. The market feed comes over the public internet, so end-to-end latency is dominated by the exchange connection. Latency targets apply **inside the pipeline**.
+- It is not an Order Management System (OMS). High availability covers the feed gateway and the model engine; there is no disaster recovery across regions.
+- **Low latency, not ultra-low latency.** The market feed comes over the public internet and models run in Python, so end-to-end latency is in milliseconds. Microseconds are a goal **inside the engine** only. No co-location or kernel-bypass networking.
 
 ---
 
@@ -43,42 +43,48 @@ The whole platform runs locally with Docker Compose and is deployed **end-to-end
 
 | Path | Transport | Encoding | Used for |
 | :--- | :--- | :--- | :--- |
-| **Fast path** | Aeron (IPC within a host, UDP unicast between hosts) | SBE (Simple Binary Encoding) | Ticks into the engine, and signals out to trading consumers |
-| **Durable path** | Apache Kafka | Protobuf + Schema Registry | Archiving, alerting, rule distribution, UI streaming |
+| **Fast path** | Aeron over UDP unicast | SBE (Simple Binary Encoding) | Market data into the engine, every model output to low-latency consumers |
+| **Durable path** | Apache Kafka | Protobuf + Schema Registry | Archiving, notifications, state distribution, UI streaming |
 
-The engine never blocks on Kafka. Results are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path. The trade-off is accepted on purpose: if the ring buffer fills up, messages are dropped rather than slowing the engine down (see [Market data on Kafka](#market-data-on-kafka)).
+The engine never blocks on Kafka. Results are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path. The trade-off is accepted on purpose: if the ring buffer fills up, messages are dropped rather than slowing the engine down ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md)).
+
+Every service runs on Fargate, so Aeron uses UDP everywhere, with an embedded Media Driver in each JVM; IPC is only a configuration option ([ADR 0021](docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)).
 
 ### System diagram
 
 ```mermaid
 flowchart LR
-    BIN["Binance WebSocket API"] -->|"raw JSON trades"| FG["argus-feed-gateway"]
-    FG -->|"Aeron IPC · SBE"| SE
+    BIN["Binance WebSocket API"] -->|"raw JSON"| FG["argus-feed-gateway<br/>(shards, active + passive)"]
+    FILES[("Recorded sessions")] --> FP["argus-feed-player<br/>(replay, backtesting)"]
+    FG -->|"Aeron UDP · SBE"| ME
+    FP -->|"Aeron UDP · SBE"| ME
 
-    subgraph SE["argus-signal-engine"]
+    subgraph ME["argus-model-engine (1..n instances)"]
         direction TB
-        IND["Built-in indicators & windows<br/>(Java, zero-allocation)"]
-        RUL["Python rules<br/>(GraalPy sandbox, in-process)"]
-        IND --> RUL
+        BM["Built-in models<br/>(Java, zero-allocation)"]
+        PY["User models: Indicator, AlertRule<br/>(Python, GraalPy sandbox)"]
+        BM --> PY
     end
 
-    SE -->|"Aeron UDP · SBE"| STR["argus-strategy-sim<br/>(paper trading)"]
-    SE -->|"async publisher"| K[("Apache Kafka")]
+    ME -->|"Aeron UDP · SBE"| STR["argus-strategy-sim<br/>(paper trading)"]
+    ME -->|"async publisher"| K[("Apache Kafka")]
 
-    K --> DSP["argus-action-dispatcher"]
-    DSP --> EXT["Webhooks / Email"]
-    K --> ARC["argus-market-archiver"]
-    ARC --> QDB[("QuestDB<br/>(market data)")]
+    K --> ND["argus-notification-dispatcher"]
+    ND --> EXT["Webhooks / Email"]
+    K --> DA["argus-data-archiver"]
+    DA --> QDB[("QuestDB<br/>(market data, outputs)")]
 
-    K -->|"ticks, signals, alerts"| API["argus-api<br/>(BFF)"]
-    QDB --> API
-    API <--> PG[("PostgreSQL<br/>(rules)")]
-    API -->|"rule changes"| K
+    K -->|"ticks, indicators, alerts"| BFF["argus-bff"]
+    QDB --> BFF
+    BFF <--> PG[("PostgreSQL<br/>(models, deployments,<br/>instruments)")]
+    BFF -->|"models, deployments,<br/>instruments, PANIC"| K
     QDB --> LAB["argus-quant-lab<br/>(Jupyter · pandas · NumPy)"]
-    LAB -->|"calibrated parameters"| K
-    API <-->|"REST + WebSocket"| UI["argus-ui<br/>(Angular)"]
+    LAB -->|"calibrated parameters"| BFF
+    BFF <-->|"REST + WebSocket"| UI["argus-ui<br/>(Angular)"]
     USR(("Quant")) --> UI
 ```
+
+Model state (models, deployments, the instrument catalogue, the PANIC state) is stored in PostgreSQL and distributed to the services through compacted Kafka topics ([ADR 0012](docs/adr/0012-distribute-model-state-through-compacted-topics.md)).
 
 ---
 
@@ -86,69 +92,105 @@ flowchart LR
 
 | Component | Type | Tech | Responsibility |
 | :--- | :--- | :--- | :--- |
-| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades into SBE messages and publishes them over Aeron. Handles reconnection and sequence-gap detection. A replay mode feeds Binance's public historical data instead, for reproducible tests and benchmarks. |
-| **`argus-signal-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Maintains in-memory sliding windows sized by what each rule declares (for example its timeframe), computes built-in indicators, and evaluates the users' Python rules in the embedded sandbox. Emits signals over Aeron, and publishes every market tick and signal to Kafka. |
-| **`argus-rule-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python rules, embedded in the signal engine. Provides the `argus` SDK (`@rule`, indicators, `argus.math`), applies isolation and resource limits, and manages the rule lifecycle. |
-| **`argus-strategy-sim`** | Service | Spring Boot, Aeron | Reference fast-path consumer. Subscribes to signals, simulates order fills and tracks a paper portfolio. It also records the signal-to-reaction latency. |
-| **`argus-action-dispatcher`** | Service | Spring Boot, Resilience4j | Consumes alert events and runs actions (webhooks, email) with retries, circuit breakers and a dead-letter topic. |
-| **`argus-market-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists every trade and top-of-book update, plus signals and alerts, into QuestDB time-partitioned tables, in batches. |
-| **`argus-api`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Rule management (CRUD, validation, versioning), historical queries, and live streaming of Kafka events to the UI. Chart candles are computed on request from the ticks in QuestDB (`SAMPLE BY`), at the resolution the user picks. |
-| **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, signals and alerts, plus a Python rule editor. |
-| **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Publishes calibrated parameters for live rules to Kafka. |
+| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades and top-of-book updates into SBE messages and publishes them over Aeron. Instruments are split into **shards**; each shard runs an active and a passive task, elected through Kafka, and the passive takes over from the last trade the active published ([ADR 0022](docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)). Publishes the status of its connections. |
+| **`argus-feed-player`** | Service | Spring Boot, Aeron, Parquet | Replays recorded sessions with the same messages as the gateway: **backtests** (original timestamps, any speed, isolated) and **simulated live** data for instruments Binance does not list ([ADR 0024](docs/adr/0024-a-feed-player-for-replay-and-backtesting.md)). |
+| **`argus-model-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Runs **deployments** of user models (`Indicator` and `AlertRule`): keeps their windows in memory, evaluates them on every input update, and emits `IndicatorValue` and `Alert` messages over Aeron and to Kafka. Instances share the deployments through a Kafka consumer group ([ADR 0014](docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md), [0016](docs/adr/0016-distribute-deployments-with-a-kafka-consumer-group.md)). |
+| **`argus-model-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python models inside the model engine: the `argus` SDK (`ModelConfiguration`, indicator views, `argus.math`), isolation and resource limits ([ADR 0011](docs/adr/0011-user-models-in-python-on-graalpy.md)). |
+| **`argus-builtin-models`** | Library | Java | Standard indicators (SMA, EMA, VWAP, mid price, RSI, Bollinger…), zero-allocation, behind the same contract as Python models ([ADR 0015](docs/adr/0015-built-in-models-in-java-behind-the-same-contract.md)). |
+| **`argus-strategy-sim`** | Service | Spring Boot, Aeron | Reference fast-path consumer. Subscribes to model outputs, simulates order fills and tracks a paper portfolio. It also records the output-to-reaction latency. |
+| **`argus-notification-dispatcher`** | Service | Spring Boot, Resilience4j | Turns alerts into notifications (webhooks, email): routing, deduplication, cooldown, retries, a circuit breaker per destination and a dead-letter topic. It **only notifies**; it never acts on Argus ([ADR 0020](docs/adr/0020-the-notification-dispatcher-only-notifies.md)). |
+| **`argus-data-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists every trade and top-of-book update, plus indicator values, alerts, notification deliveries and the audit log, into QuestDB time-partitioned tables, in batches. |
+| **`argus-bff`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Management of models, deployments and the instrument catalogue (validation, versioning, dry runs), the PANIC button, historical queries, and live streaming of Kafka events to the UI. Chart candles are computed on request from the ticks in QuestDB (`SAMPLE BY`). |
+| **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, indicators and alerts, a Python model editor, deployments, gateway status and the PANIC button. |
+| **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Sends calibrated parameters to deployments through the BFF. |
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
+| **`argus-architecture-rules`** | Library | ArchUnit | The hexagonal architecture rules, applied by every service with a single test class. |
 
 ---
 
-## ⚡ Inside the signal engine
+## ⚡ Inside the model engine
+
+### Models, deployments and outputs
+
+| Concept | What it is | Example |
+| :--- | :--- | :--- |
+| **Model** | Versioned code plus its `ModelConfiguration`. Two kinds: `Indicator` (computes values) and `AlertRule` (raises alerts) | "VWAP v3" |
+| **Deployment** | A model version bound to instruments and parameters, running | "VWAP v3 on BTCUSDT and ETHUSDT" |
+| **Output** | What a deployment emits: an `IndicatorValue` or an `Alert` | "VWAP = 64 210.5" |
+
+Models are templates: their instruments are left open, as named **slots**, and filled when the model is deployed from the UI. A model can take data from **several instruments** and from **other indicators** (synthetic market data). It is evaluated on every update of any of its inputs, with the latest value of the others, and the SDK says how old each input is ([ADR 0017](docs/adr/0017-multi-instrument-models-and-event-time.md)).
 
 ### Hot path
 
-- **Single-threaded agents** (Agrona `AgentRunner`), each pinned to its own thread with a busy-spin or back-off idle strategy. Locks are never taken on the hot path.
+- **Single-threaded agents** (Agrona `AgentRunner`), each on its own thread with a back-off idle strategy (threads cannot be pinned on Fargate). Locks are never taken on the hot path.
 - **Zero allocation in steady state.** Windows are pre-allocated primitive ring buffers (no boxed collections). SBE flyweights decode messages without creating objects. Allocation rate is checked with JFR.
+- **Event time.** Windows and the models' notion of "now" use the events' exchange timestamps, never the system clock, so replays and backtests give the same results as live runs.
 - **Kafka is decoupled** through an Agrona ring buffer and a separate publisher agent (see above).
 - **GC:** Generational ZGC, so that the remaining pauses stay short.
 
-### Python rules
+### Python models
 
-Trading rules are plain **Python** functions. There is no custom rule language: users get the full expressiveness of Python, plus a small `argus` SDK.
+Models are plain **Python**. There is no custom rule language: users get the full expressiveness of Python, plus a small `argus` SDK. The configuration is built programmatically and read once, when the model is registered.
 
 ```python
-from argus import rule, Signal
+from argus import AlertRule, Alert, ModelConfiguration
 
-@rule(symbols=["BTCUSDT"], timeframe="1m", actions=["webhook:telegram"],
-      params={"rsi_threshold": 30})
-def oversold_in_uptrend(ctx, params):
-    # ctx.rsi() and ctx.sma() are computed in Java on the fast path;
-    # the Python rule only combines them and decides.
-    if ctx.rsi(14) < params.rsi_threshold and ctx.close > ctx.sma(200):
-        return Signal.long(strength=0.8)
+class OversoldInUptrend(AlertRule):
+    def configuration(self) -> ModelConfiguration:
+        return (ModelConfiguration()
+                .add_instrument_slot("asset")
+                .add_window(ms=60_000)
+                .add_parameter("rsi_threshold", default=30, min=5, max=50))
+
+    def evaluate(self, ctx, params):
+        # ctx.rsi() and ctx.sma() are built-in Java indicators;
+        # the Python model only combines them and decides.
+        if ctx.rsi(14) < params.rsi_threshold and ctx.close > ctx.sma(200):
+            return Alert.warning("RSI below threshold in an uptrend")
 ```
 
-- **`@rule` metadata** (symbols, timeframe, actions, parameters) is read when the rule is loaded. The engine uses it to know which indicators to maintain and how much history each window must keep, and the UI uses it to display the rule.
-- **Built-in indicators** (SMA, EMA, RSI, ATR, VWAP, Bollinger bands…) are implemented in Java and exposed to Python as read-only views, so the expensive work stays on the zero-allocation path.
+- **`ModelConfiguration`** (windows by time or by number of ticks, instrument slots, consumed indicators, named outputs, parameters with their allowed ranges) is evaluated once in the sandbox and stored as data. The engine uses it to know what each deployment needs, and the UI to display and deploy it.
+- **Built-in models** (SMA, EMA, RSI, ATR, VWAP, Bollinger bands…) are implemented in Java and exposed to Python as read-only views, so the expensive work stays on the zero-allocation path.
 - **Incremental maths in pure Python** (z-scores, rolling regressions, Kalman filters, GARCH updates…) runs well: GraalPy JIT-compiles pure Python code.
 - **`argus.math`:** vetted numerical functions (for example linear algebra and statistics) implemented in Java and explicitly exposed to the sandbox. This replaces NumPy, which cannot run inside the sandbox.
-- **Model calibration** (fitting a GARCH, training a model, optimising parameters) belongs in [`argus-quant-lab`](#-components). The lab publishes the calibrated `params`, and the live rule only applies them.
+- **Model calibration** (fitting a GARCH, training a model, optimising parameters) belongs in [`argus-quant-lab`](#-components). The lab sends the calibrated parameters to the deployment, within the ranges the model declares.
 
 ### Embedded sandbox (GraalPy)
 
-Rules run **in-process** through the GraalVM Polyglot API, with GraalPy as the Python runtime. There is no network hop and no serialisation on the evaluation path.
+Models run **in-process** through the GraalVM Polyglot API, with GraalPy as the Python runtime. GraalPy was kept over CPython workers for **security**: it offers a sandbox inside the process ([ADR 0011](docs/adr/0011-user-models-in-python-on-graalpy.md)).
 
-- **Isolation:** rules run in a polyglot context with no host access beyond the `argus` SDK, no I/O, no threads and **no native code**, configured through GraalVM's `SandboxPolicy`. The stronger policies (`ISOLATED`, `UNTRUSTED`) run code in a separate isolate heap and need the language's isolate artifact (`python-isolate`). The exact policy supported by GraalPy is validated with a proof of concept at the start of Phase 3.
+- **Isolation:** models run in a polyglot context with no host access beyond the `argus` SDK, no I/O, no threads and **no native code**, configured through GraalVM's `SandboxPolicy`. The stronger policies (`ISOLATED`, `UNTRUSTED`) run code in a separate isolate heap and need the language's isolate artifact (`python-isolate`). The exact policy supported by GraalPy is validated with a proof of concept at the start of Phase 3.
 - **Resource limits:** per-evaluation limits on statements, CPU time and heap.
-- **Warm-up:** GraalPy needs to warm up before its JIT kicks in. New or updated rules are first run against recent historical data (replay) and only activated once warmed up.
-- **Fault containment:** rules run on their own evaluator agent, so a slow rule cannot stall the built-in indicators. If a rule fails repeatedly or exceeds its budget, it is disabled (circuit breaker) and an alert is raised. The engine keeps running.
+- **Warm-up:** GraalPy needs to warm up before its JIT kicks in. New deployments, and deployments moved to another instance, are first run against recent data and only emit once warmed up.
+- **Fault containment:** models run on their own evaluator agent, so a slow model cannot stall the built-in indicators. If a model fails repeatedly or exceeds its budget, it is disabled (circuit breaker) and an alert is raised. The engine keeps running.
 - **Why not pandas or NumPy here:** they are C extensions, so they cannot run under a sandbox that forbids native code. pandas is also designed for batch processing, not for per-trade updates.
 
-### Rule lifecycle
+### Model lifecycle
 
-1. A rule is created and validated through `argus-api` (syntax check, `@rule` metadata, a dry run in the sandbox) and stored, versioned, in PostgreSQL.
-2. It is published to the **compacted** Kafka topic `argus.rules.v1`. Calibrated parameters from the quant lab arrive through `argus.rule-params.v1`.
-3. The signal engine consumes both topics, warms up the new version, and swaps in an immutable rule set **outside the hot path**. On restart, it rebuilds its full state from the compacted topics.
+1. A model is created and validated through `argus-bff` (syntax check, `ModelConfiguration`, a dry run in the sandbox) and stored, versioned, in PostgreSQL. It is published to the compacted topic `argus.models.v1`.
+2. A **deployment** binds a model version to instruments and parameters, and is published to `argus.model-deployments.v1`. Every change bumps its revision, and every output carries it.
+3. Engine instances share the deployments through a Kafka consumer group: each one warms up and runs the deployments of its partitions, outside the hot path. On restart or rebalance, state is rebuilt from the compacted topics and recent data ([ADR 0016](docs/adr/0016-distribute-deployments-with-a-kafka-consumer-group.md)).
+
+### Outputs on the durable path
+
+Every output goes to the fast path. On Kafka, **every alert** is published, while **indicator values are conflated**: the latest value per deployment and instrument, at most once per interval and only if it changed. Any value can be recomputed from the archived ticks and the deployment revision ([ADR 0018](docs/adr/0018-output-policy-of-the-durable-path.md)).
+
+### PANIC button
+
+A single action in the UI **stops every model on every instance**. The state is persistent, so instances that restart or join start halted, and it cannot be undone from the UI: re-arming is an operational procedure. Both the request (with the user) and the acknowledgement of every instance are audited ([ADR 0019](docs/adr/0019-a-global-panic-button-for-models.md)).
 
 ### Where Spring is (and is not) used
 
-Spring Boot is used in every service for configuration, lifecycle, health checks (Actuator), metrics and the Kafka and REST adapters. **In the signal engine, Spring only wires and starts the agents.** The hot path runs as plain Java on dedicated threads, with no beans, proxies or reflection involved. A real ultra-low-latency system would probably drop Spring entirely. It is kept here on purpose, as a learning goal, and confined to the edges.
+Spring Boot is used in every service for configuration, lifecycle, health checks (Actuator), metrics and the Kafka and REST adapters. **In the model engine and the feed gateway, Spring only wires and starts the agents.** The hot path runs as plain Java on dedicated threads, with no beans, proxies or reflection involved. A real ultra-low-latency system would probably drop Spring entirely. It is kept here on purpose, as a learning goal, and confined to the edges ([ADR 0010](docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
+
+---
+
+## 📡 Market data and high availability
+
+- **Instrument catalogue.** Operations decide which instruments exist and which **shard** each one belongs to, through the BFF. The catalogue is distributed through `argus.instruments.v1`, so no instrument is hard-coded and adding one needs no redeploy. Each shard has its own Aeron stream ([ADR 0023](docs/adr/0023-instrument-catalogue.md)).
+- **Active and passive per shard.** Each shard is an ECS service with two tasks. Both join a Kafka consumer group on a single-partition lease topic: the task that gets the partition is the active, the other one is the passive. The passive keeps its own connection and a buffer of the feed, follows the active's output, and when it takes over it resumes from the last trade the active published ([ADR 0022](docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)).
+- **Safety net.** The engine drops any trade that is not newer than the last one it saw for that instrument, which absorbs overlaps during a failover or when an instrument moves between shards.
+- **Status.** Each gateway publishes the state of its connections to `argus.feed-status.v1`, and the BFF shows them in the UI.
 
 ---
 
@@ -166,7 +208,7 @@ com.argus.<service>
 └── config        # Spring wiring (the only package allowed to depend on adapters)
 ```
 
-**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the signal engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class.
+**ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka. The same rule is what keeps the model engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 
 ---
 
@@ -174,25 +216,39 @@ com.argus.<service>
 
 | Channel / Topic | Transport | Schema | Description |
 | :--- | :--- | :--- | :--- |
-| `aeron:ipc` stream 1001 | Aeron | SBE `Trade`, `BestBidAsk`, `Heartbeat` | Normalised market data from the feed gateway |
-| `aeron:udp` stream 2001 | Aeron | SBE `Signal`, `Heartbeat` | Signals for fast-path consumers |
-| `argus.market.trades.v1` | Kafka | Protobuf | Normalised trades (archive) |
+| `aeron:udp` stream `1000 + shard` | Aeron | SBE `Trade`, `BestBidAsk`, `Heartbeat` | Normalised market data, one stream per shard |
+| `aeron:udp` model outputs | Aeron | SBE `IndicatorValue`, `Alert`, `Heartbeat` | Every model output, for fast-path consumers and other deployments |
+| `argus.market.trades.v1` | Kafka | Protobuf | Normalised trades |
 | `argus.market.quotes.v1` | Kafka | Protobuf | Top of book (best bid / ask) |
-| `argus.signals.v1` | Kafka | Protobuf | Signals emitted by rules |
-| `argus.alerts.v1` | Kafka | Protobuf | Alerts that trigger actions |
-| `argus.rules.v1` | Kafka (compacted) | Protobuf | Current Python rule definitions (source + metadata) |
-| `argus.rule-params.v1` | Kafka (compacted) | Protobuf | Calibrated rule parameters from the quant lab |
-| `argus.alerts.dlq.v1` | Kafka | Protobuf | Actions that failed after retries |
+| `argus.indicators.v1` | Kafka | Protobuf | Indicator values, conflated |
+| `argus.alerts.v1` | Kafka | Protobuf | Every alert raised by an `AlertRule` |
+| `argus.alerts.dlq.v1` | Kafka | Protobuf | Alerts whose notification failed after retries |
+| `argus.notification-deliveries.v1` | Kafka | Protobuf | Result of every notification |
+| `argus.models.v1` | Kafka (compacted) | Protobuf | Model definitions (code and `ModelConfiguration`) |
+| `argus.model-deployments.v1` | Kafka (compacted) | Protobuf | Deployments: model version, instruments, parameters |
+| `argus.instruments.v1` | Kafka (compacted) | Protobuf | Instrument catalogue: venue, symbol, shard |
+| `argus.notification-routes.v1` | Kafka (compacted) | Protobuf | Notification channels configured by each user |
+| `argus.control.v1` | Kafka (compacted) | Protobuf | PANIC state |
+| `argus.feed-status.v1` | Kafka (compacted) | Protobuf | Connection status of every feed gateway |
+| `argus.audit.v1` | Kafka | Protobuf | Who did what: models, deployments, parameters, PANIC |
+| `argus.feed-lease.shard-<n>.v1` | Kafka | none | Leader election of the feed gateway shard `n`; carries no messages |
 
-All messages, fast path and Kafka, are described in [`contracts/README.md`](contracts/README.md). Partitions, cleanup policy and retention of each Kafka topic are defined in [`infra/docker/kafka/topics.conf`](infra/docker/kafka/topics.conf) (see [Kafka topics](#kafka-topics)).
+All messages, fast path and Kafka, are described in [`contracts/README.md`](contracts/README.md); schemas for the state and audit topics are added with the services that use them. Partitions, cleanup policy and retention of each Kafka topic are defined in [`infra/docker/kafka/topics.conf`](infra/docker/kafka/topics.conf) (see [Kafka topics](#kafka-topics)).
 
 ### Market data on Kafka
 
-- **Every tick, never aggregated.** `argus.market.trades.v1` and `argus.market.quotes.v1` carry every trade and every top-of-book update the engine receives. Nothing is pre-aggregated: candles for charts are computed on request by `argus-api` from the ticks stored in QuestDB, and rules keep their own windows in memory. Any resolution can be derived later without reprocessing.
+- **Every tick, never aggregated.** `argus.market.trades.v1` and `argus.market.quotes.v1` carry every trade and every top-of-book update the engine receives. Nothing is pre-aggregated: candles for charts are computed on request by `argus-bff` from the ticks stored in QuestDB, and models keep their own windows in memory. Any resolution can be derived later without reprocessing ([ADR 0006](docs/adr/0006-archive-every-tick-and-compute-candles-on-request.md)).
 - **Losses are possible, and visible.** The engine never blocks on Kafka, so if the publisher's ring buffer is full, ticks are dropped instead of slowing down the fast path. This is an accepted trade-off. Every dropped message is counted in a metric, and the `sequence` field leaves a gap that consumers (and any later analysis) can detect.
 - **Kafka is not the archive.** Topics have a limited retention (days). QuestDB holds the queryable history.
 
-**Data lake (out of scope).** Because the market topics hold the full tick stream with schemas registered in Apicurio, they can be exported as they are to a data lake for batch processing, for example with Kafka Connect / MSK Connect writing Parquet or Apache Iceberg tables to S3, read later from notebooks (Spark, DuckDB, pandas). Argus does not implement this; the contracts are designed so that it can be added without changes.
+---
+
+## ⚖️ Regulation and operations (documented, not implemented)
+
+Argus does not execute orders, but it reproduces the kind of signal-generation platform that MiFID II regulates. Two topics are designed and recorded as ADRs, without being implemented:
+
+- **Regulatory archive (MiFID II).** Kafka topics exported with Kafka Connect to Amazon S3 with Object Lock, kept for at least 5 years; nanosecond timestamps for clock synchronisation (RTS 25, non-HFT level on Fargate); the PANIC button as the kill functionality (RTS 6); an audit log of every change ([ADR 0026](docs/adr/0026-regulatory-archive-for-mifid-ii.md)). The same export would feed a data lake (Parquet or Apache Iceberg on S3, read from Athena, Spark or DuckDB).
+- **Model promotion across environments.** In a regulated organisation, models would live in their own repository and pipeline (tests on GraalPy, a backtest with the feed player as a quality gate, an immutable artifact promoted from development to production). In production they cannot be edited, and operations activate them when the business asks; only parameters can change, within the ranges each model declares ([ADR 0025](docs/adr/0025-model-promotion-across-environments.md)).
 
 ---
 
@@ -200,14 +256,14 @@ All messages, fast path and Kafka, are described in [`contracts/README.md`](cont
 
 | Concern | Local | AWS |
 | :--- | :--- | :--- |
-| **Runtime** | Java 25 (LTS): Eclipse Temurin; Oracle GraalVM 25 for the signal engine | Same container images, published to Amazon ECR |
+| **Runtime** | Java 25 (LTS): Eclipse Temurin; Oracle GraalVM 25 for the model engine | Same container images, published to Amazon ECR |
 | **Framework** | Spring Boot 4 | — |
-| **Fast-path messaging** | Aeron + Agrona + SBE, Media Driver sidecar, shared IPC namespace in Docker | ECS on EC2 with `ipcMode: task` (IPC is not available on Fargate). UDP unicast between hosts, because VPCs do not support multicast |
+| **Fast-path messaging** | Aeron + Agrona + SBE, UDP unicast, embedded Media Driver | Same on ECS Fargate; publishers found through AWS Cloud Map, since VPCs do not support multicast |
 | **Event streaming** | Apache Kafka (KRaft) | Amazon MSK (managed Apache Kafka, same client APIs) |
 | **Schema registry** | Apicurio Registry | Apicurio Registry on Fargate (same serializers in every environment) |
 | **Time-series storage** | QuestDB | QuestDB self-managed on EC2 + EBS |
-| **Relational storage** (rules) | PostgreSQL | Amazon RDS for PostgreSQL |
-| **User rules** | GraalPy (GraalVM Polyglot), running on Oracle GraalVM 25 | Same image as the signal engine |
+| **Relational storage** (models, deployments, instruments) | PostgreSQL | Amazon RDS for PostgreSQL |
+| **User models** | GraalPy (GraalVM Polyglot), running on Oracle GraalVM 25 | Same image as the model engine |
 | **Research** | Python (CPython), JupyterLab, pandas, NumPy, SciPy | Runs locally; not deployed in the first AWS iteration |
 | **Authentication** | Keycloak (OIDC) | Amazon Cognito (OIDC) |
 | **Notifications** | Webhook mock server, MailHog | Amazon SES / outbound webhooks |
@@ -222,12 +278,10 @@ All messages, fast path and Kafka, are described in [`contracts/README.md`](cont
 ### AWS deployment overview
 
 - **VPC** with public subnets (ALB) and private subnets (services, MSK, database).
-- **ECS cluster** with two capacity types:
-  - **EC2 capacity provider** for the fast path: the feed gateway, the signal engine and a Media Driver sidecar run in the same task and share IPC.
-  - **Fargate** for everything else.
+- **ECS cluster on Fargate** for every service ([ADR 0021](docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)). Each feed gateway shard is its own ECS service with two tasks spread across availability zones.
 - **MSK** for Kafka, **EC2** for QuestDB, **RDS** for PostgreSQL, **Cognito** for authentication, **S3 + CloudFront** for the UI.
-- **Region:** an EU region (for example `eu-west-1` or `eu-south-2`). Binance blocks access from some countries, including the US, so a US region would cut off the market feed.
-- **Cost:** MSK and the EC2 instances are billed while they run, so the environment is meant to be created with `terraform apply` and destroyed with `terraform destroy` after each session.
+- **Region:** an EU region (for example `eu-west-1` or `eu-south-2`). Binance blocks access from some countries, including the US, so a US region would cut off the market feed. Every task in a private subnet reaches Binance through the same NAT gateway address, so all shards share Binance's per-IP limits.
+- **Cost:** MSK and the EC2 instance are billed while they run, so the environment is meant to be created with `terraform apply` and destroyed with `terraform destroy` after each session.
 
 ---
 
@@ -237,12 +291,12 @@ These are **targets, not measured results.** They will be replaced by real numbe
 
 | Measurement | Scope | Target (p99) |
 | :--- | :--- | :--- |
-| Feed gateway → signal engine | Aeron IPC, same host | < 20 µs |
-| Trade decoded → built-in indicators updated | Inside `argus-signal-engine`, Java only | < 50 µs |
-| Trade decoded → signal emitted | Inside `argus-signal-engine`, simple Python rule, warmed up, sandboxed | < 500 µs |
-| Engine → strategy simulator | Aeron UDP, same AZ | < 500 µs |
+| Trade decoded → built-in indicators updated | Inside `argus-model-engine`, Java only | < 50 µs |
+| Trade decoded → output emitted | Inside `argus-model-engine`, simple Python model, warmed up, sandboxed | < 500 µs |
+| Feed gateway → model engine | Aeron UDP between Fargate tasks | Measured and published, not promised |
+| Model engine → strategy simulator | Aeron UDP between Fargate tasks | Measured and published, not promised |
 
-Cloud VMs have more jitter than dedicated hardware. Results are reported together with the environment they were measured on.
+Fargate offers no thread pinning and more jitter than dedicated hardware. Results are reported together with the environment they were measured on.
 
 ---
 
@@ -250,25 +304,27 @@ Cloud VMs have more jitter than dedicated hardware. Results are reported togethe
 
 ```text
 argus-quant-engine/
-├── contracts/            # argus-contracts: SBE + Protobuf schemas
+├── contracts/              # argus-contracts: SBE + Protobuf schemas
 ├── libs/
 │   ├── architecture-rules/ # argus-architecture-rules (ArchUnit rules for every service)
-│   └── rule-runtime/     # argus-rule-runtime (+ the argus Python SDK)
+│   ├── model-runtime/      # argus-model-runtime (GraalPy sandbox + the argus Python SDK)
+│   └── builtin-models/     # argus-builtin-models (Java indicators)
 ├── services/
 │   ├── feed-gateway/
-│   ├── signal-engine/
+│   ├── feed-player/
+│   ├── model-engine/
 │   ├── strategy-sim/
-│   ├── action-dispatcher/
-│   ├── market-archiver/
-│   └── api/
-├── ui/                   # argus-ui (Angular)
-├── quant-lab/            # argus-quant-lab (Python, Jupyter notebooks)
-├── benchmarks/           # JMH + latency harnesses
+│   ├── notification-dispatcher/
+│   ├── data-archiver/
+│   └── bff/
+├── ui/                     # argus-ui (Angular)
+├── quant-lab/              # argus-quant-lab (Python, Jupyter notebooks)
+├── benchmarks/             # JMH + latency harnesses
 ├── infra/
-│   ├── docker/           # docker-compose for local development
-│   └── terraform/        # AWS infrastructure
+│   ├── docker/             # docker-compose for local development
+│   └── terraform/          # AWS infrastructure
 └── docs/
-    └── adr/              # Architecture Decision Records
+    └── adr/                # Architecture Decision Records
 ```
 
 ---
@@ -360,25 +416,25 @@ To add a topic or change one, edit `topics.conf` and run it again (it is idempot
 docker compose restart kafka-init
 ```
 
-Partitions can only grow. If `topics.conf` asks for fewer partitions than a topic has, the script logs a warning and keeps the topic as it is; removing partitions means deleting the topic (or resetting Kafka with `docker compose down -v`).
+Partitions can only grow. If `topics.conf` asks for fewer partitions than a topic has, the script logs a warning and keeps the topic as it is; removing partitions means deleting the topic (or resetting Kafka with `docker compose down -v`). Likewise, a topic removed from `topics.conf` is not deleted: it stays until Kafka is reset.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules.
+- [ ] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules, Architecture Decision Records.
 - [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
-- [ ] **Phase 2: Vertical slice.** Feed gateway → signal engine (windows + SMA/EMA) → Kafka → archiver → QuestDB.
-- [ ] **Phase 3: Python rules & alerts.** GraalPy proof of concept, `argus-rule-runtime` and the `argus` SDK, sandbox limits and circuit breaker, compacted rules topic, action dispatcher with Resilience4j.
-- [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live rules.
-- [ ] **Phase 5: API & UI.** `argus-api` (REST, WebSocket, OIDC) and the Angular dashboard.
+- [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA) → Kafka → data archiver → QuestDB.
+- [ ] **Phase 3: Python models & alerts.** GraalPy proof of concept, `argus-feed-player`, `argus-model-runtime` and the `argus` SDK, `Indicator` and `AlertRule`, multi-instrument models, sandbox limits and circuit breaker, the PANIC button, notification dispatcher with Resilience4j.
+- [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live deployments. Demo model: a US stock valued in euros.
+- [ ] **Phase 5: API & UI.** `argus-bff` (REST, WebSocket, OIDC) and the Angular dashboard.
 - [ ] **Phase 6: Fast-path consumer & benchmarking.** `argus-strategy-sim`, JMH and HdrHistogram harnesses, real latency numbers in this README.
-- [ ] **Phase 7: AWS.** Terraform modules, ECS (EC2 + Fargate), MSK, Cognito, CloudFront, CD pipeline.
+- [ ] **Phase 7: AWS & high availability.** Terraform modules, ECS on Fargate, MSK, Cognito, CloudFront, CD pipeline. Feed gateway shards with an active and a passive, instrument catalogue, deployments distributed across model engine instances.
 - [ ] **Phase 8: Observability.** End-to-end tracing, dashboards, SLO-based alerting.
 
 Each phase, with its scope and completion criteria, is described in [`docs/roadmap.md`](docs/roadmap.md).
 
-Key design decisions are recorded as ADRs in [`docs/adr`](docs/adr).
+Key design decisions are recorded as ADRs in [`docs/adr`](docs/adr/README.md).
 
 ---
 
