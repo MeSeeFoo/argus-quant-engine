@@ -1,5 +1,6 @@
 # Checks that only make sense on a pull request: repository conventions,
-# new vulnerable dependencies, internal links and the workflows themselves.
+# new vulnerable dependencies, internal links, the workflows themselves and the
+# Claude Code hooks.
 # See docs/ci.md.
 name: PR checks
 
@@ -132,3 +133,27 @@ jobs:
           breaking_against: ${{ github.event.repository.clone_url }}#branch=${{ github.base_ref }},subdir=contracts/src/main/protobuf
           push: false
           pr_comment: false
+
+  claude-hooks:
+    name: Claude Code hooks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      # The hooks in .claude/settings.json are single-file Java programs, so they run the same
+      # on every platform. This feeds each one the JSON Claude Code would send and checks it.
+      - name: Run every hook against sample tool calls
+        run: java .claude/hooks/HookTest.java
