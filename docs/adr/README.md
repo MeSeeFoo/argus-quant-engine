@@ -42,3 +42,7 @@ ADRs are **immutable once accepted**. When a decision changes, write a new ADR a
 | [0018](0018-output-policy-of-the-durable-path.md) | Output policy of the durable path | Accepted |
 | [0019](0019-a-global-panic-button-for-models.md) | A global PANIC button for models | Accepted |
 | [0020](0020-the-notification-dispatcher-only-notifies.md) | The notification dispatcher only notifies | Accepted |
+| [0021](0021-run-everything-on-fargate-with-aeron-over-udp.md) | Run everything on Fargate, with Aeron over UDP | Accepted |
+| [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted |
+| [0023](0023-instrument-catalogue.md) | Instrument catalogue | Accepted |
+| [0024](0024-a-feed-player-for-replay-and-backtesting.md) | A feed player for replay and backtesting | Accepted |
