@@ -1,6 +1,6 @@
 # NNNN. Title in the imperative or as a noun phrase
 
-- **Status:** Proposed | Accepted | Superseded by [NNNN](NNNN-title.md) | Deprecated
+- **Status:** Proposed | Accepted | Superseded by NNNN (with a link to it) | Deprecated
 - **Date:** YYYY-MM-DD
 - **Issues:** #n
 - **Amends / amended by:** optional links to related ADRs
