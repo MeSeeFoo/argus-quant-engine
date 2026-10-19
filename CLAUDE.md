@@ -60,6 +60,21 @@ There is no "signal", "signal engine" or "rule runtime" any more: [ADR 0014](doc
 
 The [ADRs](docs/adr/README.md) are the source of truth for design. Read the relevant ones before changing a design, and do not contradict them silently. An accepted ADR is **immutable**: to change a decision, write a new ADR that supersedes or amends it, and only update the old one's status line and links.
 
+## Claude Code settings and hooks
+
+[`.claude/settings.json`](.claude/settings.json) is shared by every session and agent:
+
+- **Permissions.** Read-only `git` and `gh` commands and `./mvnw` run without asking. Force-pushes, pushes to `main` and `git rebase` are denied.
+- **Hooks**, in [`.claude/hooks`](.claude/hooks), are single-file Java programs run with the JDK the build already needs, so they behave the same on Linux and Windows (Git Bash or PowerShell):
+
+| Hook | When | What it does |
+| :--- | :--- | :--- |
+| `FormatJava` | After a Java file is written or edited | Runs `spotless:apply` on that file only (a few seconds). A file that does not parse is reported back and left as it is. |
+| `ProtectGeneratedCode` | Before a file is written or edited | Blocks edits under `target/` and `generated-sources/`, and points to the SBE or Protobuf schema to change instead. |
+| `GuardGitPush` | Before a `git` command in Bash or PowerShell | Blocks force-pushes (`--force`, `-f`, `+refspec`, `--mirror`), pushes to `main` and a bare `git push` while `main` is checked out. |
+
+`java .claude/hooks/HookTest.java` checks every hook, and CI runs it on Linux and Windows. These guards stop mistakes, not attacks: the ruleset that protects `main` on GitHub is the real boundary. Personal overrides go in `.claude/settings.local.json`, which is git-ignored; a deny rule cannot be overridden there.
+
 ## Workflow
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) defines issues, branch names, Conventional Commits, pull requests, merging and the Definition of Done, and CI enforces most of it. Follow it as written. In short: every change comes from an issue and reaches `main` through a pull request; existing commits are never rewritten.
