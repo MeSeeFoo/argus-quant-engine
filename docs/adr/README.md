@@ -46,3 +46,5 @@ ADRs are **immutable once accepted**. When a decision changes, write a new ADR a
 | [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted |
 | [0023](0023-instrument-catalogue.md) | Instrument catalogue | Accepted |
 | [0024](0024-a-feed-player-for-replay-and-backtesting.md) | A feed player for replay and backtesting | Accepted |
+| [0025](0025-model-promotion-across-environments.md) | Model promotion across environments | Accepted, not implemented |
+| [0026](0026-regulatory-archive-for-mifid-ii.md) | Regulatory archive for MiFID II | Accepted, not implemented |
