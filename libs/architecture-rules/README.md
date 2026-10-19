@@ -1,6 +1,6 @@
 # argus-architecture-rules
 
-ArchUnit rules for the [hexagonal architecture](../../README.md#-hexagonal-architecture) that every Argus service follows. The rules are enforced by tests, not by convention, and they are what keeps the signal engine's hot path free of framework code.
+ArchUnit rules for the [hexagonal architecture](../../README.md#-hexagonal-architecture) that every Argus service follows. The rules are enforced by tests, not by convention, and they are what keeps the model engine's hot path free of framework code.
 
 ## Rules
 
