@@ -116,7 +116,7 @@ Groups and text must be written and read in this order, after the fixed fields. 
 
 | Offset | Field | Type | Meaning |
 | --: | :--- | :--- | :--- |
-| 0 | `sequence` | `Sequence` | Last sequence published on the stream |
+| 0 | `sequence` | `Sequence` | Last sequence published on the stream; 0 if nothing was published yet |
 | 8 | `timestamp` | `EpochNanos` | Sender clock |
 
 The timestamps measure latency along the path: `exchangeTimestamp → receiveTimestamp` is the network hop, `receiveTimestamp → emitTimestamp` is the time spent inside the pipeline.
