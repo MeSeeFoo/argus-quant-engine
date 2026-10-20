@@ -2,6 +2,7 @@ package com.argus.feedgateway.adapter.in.binance;
 
 import com.argus.feedgateway.adapter.in.binance.sbe.BestBidAskStreamEventDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.BoolEnum;
+import com.argus.feedgateway.adapter.in.binance.sbe.GroupSizeEncodingDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder.TradesDecoder;
@@ -22,6 +23,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 public final class BinanceStreamDecoder {
 
   private static final long NANOS_PER_MICRO = 1_000;
+  private static final int ROOT_OFFSET = MessageHeaderDecoder.ENCODED_LENGTH;
 
   private final MessageHeaderDecoder header = new MessageHeaderDecoder();
   private final TradesStreamEventDecoder trades = new TradesStreamEventDecoder();
@@ -47,35 +49,57 @@ public final class BinanceStreamDecoder {
    * @param receiveTimestamp time the gateway received the frame, epoch nanoseconds
    */
   public void onFrame(DirectBuffer buffer, int offset, int length, long receiveTimestamp) {
-    if (length < MessageHeaderDecoder.ENCODED_LENGTH) {
+    if (length < ROOT_OFFSET) {
       counters.unsupportedMessage();
       return;
     }
-    // A view of exactly this frame: a truncated message fails the bounds checks instead of
-    // reading past it.
+    // A view of exactly this frame. Every length read from the wire is checked against it before
+    // it is used, so a malformed frame is rejected instead of read past its end.
     frame.wrap(buffer, offset, length);
     header.wrap(frame, 0);
     if (header.schemaId() != TradesStreamEventDecoder.SCHEMA_ID) {
       counters.unsupportedMessage();
       return;
     }
-    try {
-      switch (header.templateId()) {
-        case TradesStreamEventDecoder.TEMPLATE_ID -> onTrades(receiveTimestamp);
-        case BestBidAskStreamEventDecoder.TEMPLATE_ID -> onBestBidAsk(receiveTimestamp);
-        default -> counters.unsupportedMessage();
-      }
-    } catch (IndexOutOfBoundsException malformed) {
-      counters.unsupportedMessage();
+    switch (header.templateId()) {
+      case TradesStreamEventDecoder.TEMPLATE_ID -> onTrades(receiveTimestamp);
+      case BestBidAskStreamEventDecoder.TEMPLATE_ID -> onBestBidAsk(receiveTimestamp);
+      default -> counters.unsupportedMessage();
     }
   }
 
   private void onTrades(long receiveTimestamp) {
-    trades.wrap(frame, MessageHeaderDecoder.ENCODED_LENGTH, header.blockLength(), header.version());
-    // The symbol comes after the trades: skip them to read it, then rewind.
+    int blockLength = header.blockLength();
+    if (blockLength < TradesStreamEventDecoder.BLOCK_LENGTH
+        || !fits(ROOT_OFFSET + blockLength + GroupSizeEncodingDecoder.ENCODED_LENGTH)) {
+      counters.unsupportedMessage();
+      return;
+    }
+    trades.wrap(frame, ROOT_OFFSET, blockLength, header.version());
+    // The symbol comes after the trades: check and skip them to read it, then rewind.
     TradesDecoder group = trades.trades();
+    int count = group.count();
+    int entryLength = group.actingBlockLength();
+    if (count < 0
+        || entryLength < TradesDecoder.sbeBlockLength()
+        || !fits(
+            trades.limit()
+                + (long) count * entryLength
+                + TradesStreamEventDecoder.symbolHeaderLength())) {
+      counters.unsupportedMessage();
+      return;
+    }
     while (group.hasNext()) {
-      group.next();
+      short buyerIsMaker = group.next().isBuyerMakerRaw();
+      if (buyerIsMaker != BoolEnum.True.value() && buyerIsMaker != BoolEnum.False.value()) {
+        counters.unsupportedMessage();
+        return;
+      }
+    }
+    if (!fits(
+        trades.limit() + TradesStreamEventDecoder.symbolHeaderLength() + trades.symbolLength())) {
+      counters.unsupportedMessage();
+      return;
     }
     int instrument = instrumentOf(trades.getSymbol(symbol, 0, symbol.length));
     if (instrument == Instruments.UNKNOWN) {
@@ -103,8 +127,20 @@ public final class BinanceStreamDecoder {
   }
 
   private void onBestBidAsk(long receiveTimestamp) {
-    bestBidAsk.wrap(
-        frame, MessageHeaderDecoder.ENCODED_LENGTH, header.blockLength(), header.version());
+    int blockLength = header.blockLength();
+    if (blockLength < BestBidAskStreamEventDecoder.BLOCK_LENGTH
+        || !fits(ROOT_OFFSET + blockLength + BestBidAskStreamEventDecoder.symbolHeaderLength())) {
+      counters.unsupportedMessage();
+      return;
+    }
+    bestBidAsk.wrap(frame, ROOT_OFFSET, blockLength, header.version());
+    if (!fits(
+        bestBidAsk.limit()
+            + BestBidAskStreamEventDecoder.symbolHeaderLength()
+            + bestBidAsk.symbolLength())) {
+      counters.unsupportedMessage();
+      return;
+    }
     long eventTime = bestBidAsk.eventTime();
     long bookUpdateId = bestBidAsk.bookUpdateId();
     byte priceExponent = bestBidAsk.priceExponent();
@@ -136,5 +172,10 @@ public final class BinanceStreamDecoder {
       counters.unknownSymbol();
     }
     return instrument;
+  }
+
+  /** Whether a part of the message ending at {@code end} lies inside the frame. */
+  private boolean fits(long end) {
+    return end <= frame.capacity();
   }
 }

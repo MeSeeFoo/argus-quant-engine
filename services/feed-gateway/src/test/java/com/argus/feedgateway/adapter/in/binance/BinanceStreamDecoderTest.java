@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.argus.feedgateway.adapter.in.binance.BinanceFrames.Trade;
 import com.argus.feedgateway.adapter.in.binance.sbe.DepthSnapshotStreamEventEncoder;
+import com.argus.feedgateway.adapter.in.binance.sbe.GroupSizeEncodingDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderEncoder;
+import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder;
+import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder.TradesDecoder;
 import com.argus.feedgateway.application.MarketDataCounters;
 import com.argus.feedgateway.application.MarketDataNormaliser;
 import com.argus.feedgateway.application.RecordingPublisher;
@@ -19,6 +22,9 @@ class BinanceStreamDecoderTest {
 
   private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
   private static final long RECEIVED = 1_760_000_000_123_456_789L;
+  private static final int TRADES_GROUP_OFFSET =
+      MessageHeaderEncoder.ENCODED_LENGTH + TradesStreamEventDecoder.BLOCK_LENGTH;
+  private static final int GROUP_HEADER = GroupSizeEncodingDecoder.ENCODED_LENGTH;
 
   private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1024]);
   private final BinanceFrames frames = new BinanceFrames();
@@ -121,6 +127,78 @@ class BinanceStreamDecoderTest {
   }
 
   @Test
+  void dropsOnlyTheTradesWithUnrepresentableValues() {
+    long tooLarge = 100_000_000_000L; // x 10^8 does not fit in int64
+    int length =
+        frames.trades(
+            buffer,
+            0,
+            "BTCUSDT",
+            1,
+            1,
+            0,
+            -8,
+            new Trade(1, 64210, 1, false),
+            new Trade(2, tooLarge, 1, false),
+            new Trade(3, 64211, 1, false));
+
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    assertThat(publisher.trades)
+        .extracting(RecordingPublisher.Trade::tradeId)
+        .containsExactly(1L, 3L);
+    assertThat(counters.unrepresentableValues()).isEqualTo(1);
+  }
+
+  @Test
+  void rejectsTheWholeEventWhenAnAggressorIsInvalid() {
+    int length =
+        frames.trades(
+            buffer,
+            0,
+            "BTCUSDT",
+            1,
+            1,
+            -2,
+            -8,
+            new Trade(1, 1, 1, false),
+            new Trade(2, 1, 1, true));
+    int secondEntry = TRADES_GROUP_OFFSET + GROUP_HEADER + TradesDecoder.sbeBlockLength();
+    buffer.putByte(secondEntry + TradesDecoder.isBuyerMakerEncodingOffset(), (byte) 255);
+
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    assertThat(publisher.trades).isEmpty();
+    assertThat(counters.unsupportedMessages()).isEqualTo(1);
+  }
+
+  @Test
+  void rejectsLengthsFromTheWireThatDoNotFitTheFrame() {
+    int length = frames.trades(buffer, 0, "BTCUSDT", 1, 1, -2, -8, new Trade(1, 1, 1, false));
+    // Would make the decoder walk two billion entries
+    buffer.putInt(TRADES_GROUP_OFFSET + 2, Integer.MAX_VALUE);
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+    buffer.putInt(TRADES_GROUP_OFFSET + 2, -1);
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    length = frames.trades(buffer, 0, "BTCUSDT", 1, 1, -2, -8, new Trade(1, 1, 1, false));
+    buffer.putShort(TRADES_GROUP_OFFSET, (short) 1);
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    length = frames.trades(buffer, 0, "BTCUSDT", 1, 1, -2, -8, new Trade(1, 1, 1, false));
+    new MessageHeaderEncoder().wrap(buffer, 0).blockLength(4);
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    length = frames.bestBidAsk(buffer, 0, "BTCUSDT", 1, 1, -2, -2, 1, 1, 2, 1);
+    new MessageHeaderEncoder().wrap(buffer, 0).blockLength(4);
+    decoder.onFrame(buffer, 0, length, RECEIVED);
+
+    assertThat(publisher.trades).isEmpty();
+    assertThat(publisher.bestBidAsks).isEmpty();
+    assertThat(counters.unsupportedMessages()).isEqualTo(5);
+  }
+
+  @Test
   void ignoresFramesShorterThanAHeader() {
     decoder.onFrame(buffer, 0, MessageHeaderEncoder.ENCODED_LENGTH - 1, RECEIVED);
 
@@ -131,11 +209,13 @@ class BinanceStreamDecoderTest {
   void ignoresTruncatedFrames() {
     int length = frames.trades(buffer, 0, "BTCUSDT", 1, 1, -2, -8, new Trade(1, 1, 1, false));
     decoder.onFrame(buffer, 0, length - 4, RECEIVED);
+    decoder.onFrame(buffer, 0, length - 12, RECEIVED);
     length = frames.bestBidAsk(buffer, 0, "BTCUSDT", 1, 1, -2, -2, 1, 1, 2, 1);
+    decoder.onFrame(buffer, 0, length - 2, RECEIVED);
     decoder.onFrame(buffer, 0, length - 20, RECEIVED);
 
     assertThat(publisher.trades).isEmpty();
     assertThat(publisher.bestBidAsks).isEmpty();
-    assertThat(counters.unsupportedMessages()).isEqualTo(2);
+    assertThat(counters.unsupportedMessages()).isEqualTo(4);
   }
 }

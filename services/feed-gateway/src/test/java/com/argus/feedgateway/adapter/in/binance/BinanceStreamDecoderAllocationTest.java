@@ -36,45 +36,69 @@ class BinanceStreamDecoderAllocationTest {
           instruments, new MarketDataNormaliser(instruments, publisher, counters), counters);
   private final BestBidAskStreamEventEncoder bookUpdateIds = new BestBidAskStreamEventEncoder();
   private long bookUpdateId;
+  private Frame trades = new Frame(0, 0);
+  private Frame unknownSymbol = trades;
+  private Frame unrepresentable = trades;
+  private Frame book = trades;
 
   @Test
   void decodesWithoutAllocating() {
+    // Every frame is written once, before measuring: encoding a symbol allocates.
     BinanceFrames frames = new BinanceFrames();
-    int tradesLength =
-        frames.trades(
-            buffer,
+    trades =
+        new Frame(
             0,
-            "BTCUSDT",
-            1,
-            1,
-            -2,
-            -8,
-            new Trade(1, 6421050, 1, true),
-            new Trade(2, 6421051, 2, false));
-    int bookOffset = 512;
+            frames.trades(
+                buffer,
+                0,
+                "BTCUSDT",
+                1,
+                1,
+                -2,
+                -8,
+                new Trade(1, 6421050, 1, true),
+                new Trade(2, 6421051, 2, false)));
+    unknownSymbol =
+        new Frame(
+            256, frames.trades(buffer, 256, "SOLUSDT", 1, 1, -2, -8, new Trade(1, 1, 1, true)));
+    unrepresentable =
+        new Frame(
+            384, frames.trades(buffer, 384, "BTCUSDT", 1, 1, -9, -8, new Trade(1, 1, 1, true)));
+    book = new Frame(512, frames.bestBidAsk(buffer, 512, "BTCUSDT", 1, 0, -2, -5, 1, 1, 2, 1));
+    bookUpdateIds.wrap(buffer, book.offset() + MessageHeaderEncoder.ENCODED_LENGTH);
     var threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 
-    int bookLength = frames.bestBidAsk(buffer, bookOffset, "BTCUSDT", 1, 0, -2, -5, 1, 1, 2, 1);
-    bookUpdateIds.wrap(buffer, bookOffset + MessageHeaderEncoder.ENCODED_LENGTH);
-
-    decodeFrames(tradesLength, bookOffset, bookLength); // warm-up
+    decodeFrames(); // warm-up
     long before = threads.getCurrentThreadAllocatedBytes();
-    decodeFrames(tradesLength, bookOffset, bookLength);
+    decodeFrames();
     long allocated = threads.getCurrentThreadAllocatedBytes() - before;
 
     assertThat(publisher.trades).isEqualTo(4L * FRAMES);
     assertThat(publisher.bestBidAsks).isEqualTo(2L * FRAMES);
+    assertThat(counters.staleBookUpdates()).isEqualTo(2L * FRAMES);
+    assertThat(counters.unknownSymbols()).isEqualTo(2L * FRAMES);
+    assertThat(counters.unrepresentableValues()).isEqualTo(2L * FRAMES);
     assertThat(allocated).isLessThan(TOLERATED_BYTES);
   }
 
-  private void decodeFrames(int tradesLength, int bookOffset, int bookLength) {
+  /** Accepted and rejected frames alike: none of them may allocate. */
+  private void decodeFrames() {
     for (int i = 0; i < FRAMES; i++) {
-      decoder.onFrame(buffer, 0, tradesLength, i);
-      // A newer book version each time, written in place so the test allocates nothing either
+      decode(trades, i);
+      decode(unknownSymbol, i);
+      decode(unrepresentable, i);
+      // A newer book version, written in place, then the same one again, which is stale
       bookUpdateIds.bookUpdateId(++bookUpdateId);
-      decoder.onFrame(buffer, bookOffset, bookLength, i);
+      decode(book, i);
+      decode(book, i);
     }
   }
+
+  private void decode(Frame frame, long receiveTimestamp) {
+    decoder.onFrame(buffer, frame.offset(), frame.length(), receiveTimestamp);
+  }
+
+  private record Frame(int offset, int length) {}
 
   private static final class CountingPublisher implements MarketDataPublisher {
 
