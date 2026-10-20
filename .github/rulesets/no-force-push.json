@@ -1,0 +1,13 @@
+{
+  "name": "No force-push",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~ALL"],
+      "exclude": ["refs/heads/dependabot/**/*", "refs/heads/release-please--**"]
+    }
+  },
+  "bypass_actors": [],
+  "rules": [{ "type": "non_fast_forward" }]
+}
