@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: argus-feed-gateway
+
+server:
+  # 8080 is Apicurio in the local environment (infra/docker)
+  port: 8081
