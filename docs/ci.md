@@ -163,6 +163,13 @@ The ruleset lives in the repository settings; [`.github/rulesets/protect-main.js
 gh api -X PUT repos/MeSeeFoo/argus-quant-engine/rulesets/25230975 --input .github/rulesets/protect-main.json
 ```
 
+A second ruleset, [`.github/rulesets/no-force-push.json`](../.github/rulesets/no-force-push.json), rejects force pushes on **every** branch, because pushed commits are never rewritten ([`CONTRIBUTING.md`](../CONTRIBUTING.md#branches)). It excludes the branches that bots rewrite on purpose: `dependabot/…` (Dependabot rebases its pull requests) and `release-please--…` (release-please regenerates its release pull request). Ruleset patterns only cross `/` with `**/`, hence `dependabot/**/*`. To check which rules apply to a branch, and to apply a change to the file:
+
+```bash
+gh api repos/MeSeeFoo/argus-quant-engine/rules/branches/feat/1-my-branch
+gh api -X PUT repos/MeSeeFoo/argus-quant-engine/rulesets/25461888 --input .github/rulesets/no-force-push.json
+```
+
 A new required check must be added to the ruleset by name (the job's `name:`), after it has run at least once. If an external service is down (for example SonarQube Cloud), an administrator can remove its check from the ruleset temporarily (*Settings → Rules → Rulesets*).
 
 ## Running the checks locally
