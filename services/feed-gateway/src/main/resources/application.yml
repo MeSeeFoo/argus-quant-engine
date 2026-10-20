@@ -23,3 +23,8 @@ argus:
       # Shard 1 (ADR 0023)
       stream-id: 1001
       heartbeat-interval: 1s
+    binance:
+      uri: wss://stream-sbe.binance.com:9443
+      # Read-only Ed25519 key, from the environment: never commit it
+      api-key: ${BINANCE_API_KEY:}
+      symbols: BTCUSDT
