@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.2.0](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.1.0...v0.2.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **contracts:** the Signal message (SBE template 10, topic argus.signals.v1) and the Direction enum are removed. No consumer used them yet.
+
+### Features
+
+* add the architecture reviewer subagent ([#52](https://github.com/MeSeeFoo/argus-quant-engine/issues/52)) ([207ae8a](https://github.com/MeSeeFoo/argus-quant-engine/commit/207ae8a57e42254a83180c798f7986b8ad74da71))
+* add the architecture reviewer subagent ([#52](https://github.com/MeSeeFoo/argus-quant-engine/issues/52)) ([408fa33](https://github.com/MeSeeFoo/argus-quant-engine/commit/408fa337addaf0468ebca828526a7f48687c8755))
+* **contracts:** replace Signal with IndicatorValue and Alert ([#45](https://github.com/MeSeeFoo/argus-quant-engine/issues/45)) ([ed079ca](https://github.com/MeSeeFoo/argus-quant-engine/commit/ed079ca0c2d24d8032000399e105d937ad284d10))
+* **feed-gateway:** map Binance market data to canonical values ([#68](https://github.com/MeSeeFoo/argus-quant-engine/issues/68)) ([f8ff0ce](https://github.com/MeSeeFoo/argus-quant-engine/commit/f8ff0ce859f7ab03dc73484aa9dae7a2184de95b))
+* **feed-gateway:** map Binance market data to canonical values ([#68](https://github.com/MeSeeFoo/argus-quant-engine/issues/68)) ([cef0ad9](https://github.com/MeSeeFoo/argus-quant-engine/commit/cef0ad919d2329d86f72c78b22d9f864b2fd18b5))
+* **feed-gateway:** publish canonical market data over Aeron ([#69](https://github.com/MeSeeFoo/argus-quant-engine/issues/69)) ([c2571f6](https://github.com/MeSeeFoo/argus-quant-engine/commit/c2571f6f304384aec161ccac42b1ca2e6610353c))
+* **feed-gateway:** publish canonical market data over Aeron ([#69](https://github.com/MeSeeFoo/argus-quant-engine/issues/69)) ([9c8f7f8](https://github.com/MeSeeFoo/argus-quant-engine/commit/9c8f7f8c9f613e21e3227c08a8e049d43e883d9d))
+* **feed-gateway:** scaffold the feed gateway service ([#67](https://github.com/MeSeeFoo/argus-quant-engine/issues/67)) ([370b25b](https://github.com/MeSeeFoo/argus-quant-engine/commit/370b25b1b8f46bd76b26fa1b7ecbebd6e18c2d9c))
+* **feed-gateway:** scaffold the feed gateway service ([#67](https://github.com/MeSeeFoo/argus-quant-engine/issues/67)) ([0fd6581](https://github.com/MeSeeFoo/argus-quant-engine/commit/0fd65819e29b964069e391951304dfb61f622540))
+* **infra:** provision the Kafka topics of the revised architecture ([#46](https://github.com/MeSeeFoo/argus-quant-engine/issues/46)) ([ef787bd](https://github.com/MeSeeFoo/argus-quant-engine/commit/ef787bd30e4d808aa0134a6f93768a24f6cd6787))
+
+
+### Bug fixes
+
+* **feed-gateway:** check Binance frame lengths before decoding ([#68](https://github.com/MeSeeFoo/argus-quant-engine/issues/68)) ([1c5aafd](https://github.com/MeSeeFoo/argus-quant-engine/commit/1c5aafd122eb61d9efff9be1334417eb4a4fae38))
+* **feed-gateway:** retry term rotations and schedule heartbeats on a monotonic clock ([#69](https://github.com/MeSeeFoo/argus-quant-engine/issues/69)) ([23d6d81](https://github.com/MeSeeFoo/argus-quant-engine/commit/23d6d81ceca84e0cb1318c019758bd3c7fe04965))
+
+
+### Documentation
+
+* add a story issue template ([#63](https://github.com/MeSeeFoo/argus-quant-engine/issues/63)) ([964de1a](https://github.com/MeSeeFoo/argus-quant-engine/commit/964de1ac53eed61c05a98e636bf1dba1253adea7))
+* add issue and pull request templates ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([e1f3578](https://github.com/MeSeeFoo/argus-quant-engine/commit/e1f35782614718eab8aee904dd84be368c66ecc8))
+* add project instructions for Claude Code ([#49](https://github.com/MeSeeFoo/argus-quant-engine/issues/49)) ([7861f65](https://github.com/MeSeeFoo/argus-quant-engine/commit/7861f6537e8ca047ddd985f2bcf4ea897c185914))
+* add project instructions for Claude Code ([#49](https://github.com/MeSeeFoo/argus-quant-engine/issues/49)) ([dc437f9](https://github.com/MeSeeFoo/argus-quant-engine/commit/dc437f9fc1476bf72908caac662ac24c057bb1da))
+* add repository conventions, templates and contributing guide ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([a512b41](https://github.com/MeSeeFoo/argus-quant-engine/commit/a512b412f4141ed093f056a1e602b93a40cbc116))
+* add the contributing guide and explain the trunk-based branching model ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([29c9a67](https://github.com/MeSeeFoo/argus-quant-engine/commit/29c9a67dea13ae2613654cc37ada6825490a2b5e))
+* **adr:** add the ADR template, index and process ([#11](https://github.com/MeSeeFoo/argus-quant-engine/issues/11)) ([77f5954](https://github.com/MeSeeFoo/argus-quant-engine/commit/77f59546874825254f0f5ec78d44fe956411e5d3))
+* **adr:** avoid a placeholder link in the ADR template ([#11](https://github.com/MeSeeFoo/argus-quant-engine/issues/11)) ([28c6729](https://github.com/MeSeeFoo/argus-quant-engine/commit/28c67292ecdf6be7c0daa708a3b9436656e99d8b))
+* **adr:** document model promotion and the MiFID II regulatory archive ([#44](https://github.com/MeSeeFoo/argus-quant-engine/issues/44)) ([c6f4525](https://github.com/MeSeeFoo/argus-quant-engine/commit/c6f45250c337d280fab21c4d5199bf56813bee7a))
+* **adr:** record the decisions taken before the architecture review ([#11](https://github.com/MeSeeFoo/argus-quant-engine/issues/11)) ([3c46591](https://github.com/MeSeeFoo/argus-quant-engine/commit/3c46591139d80b75089017a190c8377a77dc3dac))
+* **adr:** record the market data and platform decisions of the architecture review ([#43](https://github.com/MeSeeFoo/argus-quant-engine/issues/43)) ([f71f47f](https://github.com/MeSeeFoo/argus-quant-engine/commit/f71f47f58b6ead6db672fd47256ae4ccefc991ed))
+* **adr:** record the model engine decisions of the architecture review ([#42](https://github.com/MeSeeFoo/argus-quant-engine/issues/42)) ([45a028c](https://github.com/MeSeeFoo/argus-quant-engine/commit/45a028c16bd55b52f3d40f4ea7b37a037d674528))
+* **contracts:** define a heartbeat sequence of 0 ([#69](https://github.com/MeSeeFoo/argus-quant-engine/issues/69)) ([25d4224](https://github.com/MeSeeFoo/argus-quant-engine/commit/25d4224ea8819d8d4c5732483c1f5db7a4d87e69))
+* **contracts:** describe IndicatorValue, Alert and how to retire a message ([#45](https://github.com/MeSeeFoo/argus-quant-engine/issues/45)) ([297d2e3](https://github.com/MeSeeFoo/argus-quant-engine/commit/297d2e3cea0e0e07a3a677c7b6ee2af56413e27c))
+* describe how to invoke the reviewer agent ([#52](https://github.com/MeSeeFoo/argus-quant-engine/issues/52)) ([9b7bfd1](https://github.com/MeSeeFoo/argus-quant-engine/commit/9b7bfd192a06f9dc220d3d2726cdb45769430359))
+* describe the Claude Code settings and hooks ([#50](https://github.com/MeSeeFoo/argus-quant-engine/issues/50)) ([3d5d56c](https://github.com/MeSeeFoo/argus-quant-engine/commit/3d5d56c08926c06114d9d8808b99a689daae72d8))
+* describe the revised architecture in the README and the roadmap ([#41](https://github.com/MeSeeFoo/argus-quant-engine/issues/41)) ([dac1d7f](https://github.com/MeSeeFoo/argus-quant-engine/commit/dac1d7fa154606b5fb97783452f95d9d7f059f3f))
+* link the ADRs from the contributing guide and check docs/adr links again ([#11](https://github.com/MeSeeFoo/argus-quant-engine/issues/11)) ([0d3f18f](https://github.com/MeSeeFoo/argus-quant-engine/commit/0d3f18fff26f0715d5a562c140e99896d052a8c4))
+* link the contributing guide from the README ([#10](https://github.com/MeSeeFoo/argus-quant-engine/issues/10)) ([1e10458](https://github.com/MeSeeFoo/argus-quant-engine/commit/1e10458277ad5bc8154ef07d304b30c4606822ce))
+* list the feed gateway among the existing modules ([#67](https://github.com/MeSeeFoo/argus-quant-engine/issues/67)) ([9250df1](https://github.com/MeSeeFoo/argus-quant-engine/commit/9250df14a266301b773ef265b4d8913487f3eb80))
+* record the architecture decisions and close the architecture review ([#11](https://github.com/MeSeeFoo/argus-quant-engine/issues/11)) ([ed05db3](https://github.com/MeSeeFoo/argus-quant-engine/commit/ed05db3127b5076a5491a6995e7c1010b5fed90d))
+* tick phase 0 in the README roadmap ([#49](https://github.com/MeSeeFoo/argus-quant-engine/issues/49)) ([59453e1](https://github.com/MeSeeFoo/argus-quant-engine/commit/59453e106e02fb9806bdbc81190e9abb145db8c0))
+* track work as epics, stories and tasks ([#63](https://github.com/MeSeeFoo/argus-quant-engine/issues/63)) ([cf9934b](https://github.com/MeSeeFoo/argus-quant-engine/commit/cf9934bd182971bc6da0795c65291058a534b1fc))
+* track work as epics, stories and tasks ([#63](https://github.com/MeSeeFoo/argus-quant-engine/issues/63)) ([3c2b5d9](https://github.com/MeSeeFoo/argus-quant-engine/commit/3c2b5d96892fba84c38634c4db0fb1b4cb7de7aa))
+
+
+### Build
+
+* **deps:** bump sbe-tool to 1.41.0 ([#68](https://github.com/MeSeeFoo/argus-quant-engine/issues/68)) ([b82b44a](https://github.com/MeSeeFoo/argus-quant-engine/commit/b82b44a12bfe033259dabefe31baf1fea7bc4240))
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 2 updates ([e62cd3b](https://github.com/MeSeeFoo/argus-quant-engine/commit/e62cd3b3fe455ea2a958f5f572f01f71b409ed07))
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 2 updates ([256b569](https://github.com/MeSeeFoo/argus-quant-engine/commit/256b56913405e5f9ccb6b57337128d094cf53889))
+* **feed-gateway:** generate Binance's SBE stream codecs ([#68](https://github.com/MeSeeFoo/argus-quant-engine/issues/68)) ([d410547](https://github.com/MeSeeFoo/argus-quant-engine/commit/d410547487ae939f062e291d115d979d7351956d))
+* manage the argus-contracts version ([#69](https://github.com/MeSeeFoo/argus-quant-engine/issues/69)) ([e40e95d](https://github.com/MeSeeFoo/argus-quant-engine/commit/e40e95dd91cc862ab78c9a8e90ba8f965ee6e0fd))
+* manage the maven-jar-plugin version ([#67](https://github.com/MeSeeFoo/argus-quant-engine/issues/67)) ([8dd3b9b](https://github.com/MeSeeFoo/argus-quant-engine/commit/8dd3b9b16f9e4faf23d00853077796e3a98ea4ab))
+* store mvnw.cmd with LF line endings again ([#32](https://github.com/MeSeeFoo/argus-quant-engine/issues/32)) ([489baca](https://github.com/MeSeeFoo/argus-quant-engine/commit/489baca39b14c2de3b827c04785dd95eb7a8c86a))
+
+
+### Continuous integration
+
+* check that files keep the line endings set in .gitattributes ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([ef00d65](https://github.com/MeSeeFoo/argus-quant-engine/commit/ef00d6574d8ac94a3d4ebe47bab03df44baec62b))
+* check that files keep the line endings set in .gitattributes ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([71cb534](https://github.com/MeSeeFoo/argus-quant-engine/commit/71cb534e6f66468ca333a78ad8fe6921c0a4372e))
+* reject force-pushes on every branch ([#59](https://github.com/MeSeeFoo/argus-quant-engine/issues/59)) ([c8c7233](https://github.com/MeSeeFoo/argus-quant-engine/commit/c8c723324db76be1f9961224aae9f4b5783291a0))
+* reject force-pushes on every branch ([#59](https://github.com/MeSeeFoo/argus-quant-engine/issues/59)) ([9b5373e](https://github.com/MeSeeFoo/argus-quant-engine/commit/9b5373e6643bdab15c4a797624a880cd10278458))
+* require the line endings check on main ([#37](https://github.com/MeSeeFoo/argus-quant-engine/issues/37)) ([acae894](https://github.com/MeSeeFoo/argus-quant-engine/commit/acae894dede0858a3b73ff4be7fd7f5d5138467c))
+* run the Claude Code hooks on Linux and Windows ([#50](https://github.com/MeSeeFoo/argus-quant-engine/issues/50)) ([f7eb91e](https://github.com/MeSeeFoo/argus-quant-engine/commit/f7eb91ec3de654027f6473a4c0c60f046199b870))
+
 ## 0.1.0 (2026-10-16)
 
 
