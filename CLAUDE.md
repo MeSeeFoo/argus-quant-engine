@@ -75,6 +75,8 @@ The [ADRs](docs/adr/README.md) are the source of truth for design. Read the rele
 
 `bash .claude/hooks/test-hooks.sh` checks every hook, and CI runs it on Linux and Windows. These guards stop mistakes, not attacks: the ruleset that protects `main` on GitHub is the real boundary. Personal overrides go in `.claude/settings.local.json`, which is git-ignored; a deny rule cannot be overridden there.
 
+**Reviewer agent.** [`.claude/agents/reviewer.md`](.claude/agents/reviewer.md) is a read-only subagent that checks a diff against the ADRs, the hot-path rules, the contracts and `CONTRIBUTING.md`, and reports findings by severity. Ask "use the reviewer agent on this branch" (or on pull request `#n`) before opening or merging a pull request. Its checklist is the delimited *Checklist* section of that file.
+
 ## Workflow
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) defines issues, branch names, Conventional Commits, pull requests, merging and the Definition of Done, and CI enforces most of it. Follow it as written. In short: every change comes from an issue and reaches `main` through a pull request; existing commits are never rewritten.
