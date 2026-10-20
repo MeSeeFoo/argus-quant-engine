@@ -37,11 +37,21 @@ A `develop` branch (GitFlow) integrates work before it is stabilised and release
 
 ## Issues
 
-- Work is tracked in the [Argus Quant Engine project](https://github.com/users/MeSeeFoo/projects/1). Each phase of the [roadmap](docs/roadmap.md) is an epic, and its tasks are sub-issues.
-- Titles start with the phase and task number: `[0.8] Repository conventions`. A follow-up found while working on a task takes the next sub-number (`[0.7.12]`).
-- Use the templates: **Task** (context, scope, acceptance criteria) or **Bug** (what happens, what should happen, how to reproduce). Blank issues are disabled.
-- Label every issue with its phase (`phase:0`, …) and its area (`build`, `ci`, `contracts`, `docs`, `infra`, `quality`, `bug`).
-- One issue, one branch, one pull request. Work found along the way that is not in the scope goes in a new issue.
+Work is tracked in the [Argus Quant Engine project](https://github.com/users/MeSeeFoo/projects/1) as a three-level hierarchy, linked as GitHub sub-issues:
+
+| Level | What it is | Title | Labels |
+| :--- | :--- | :--- | :--- |
+| **Epic** | A phase of the [roadmap](docs/roadmap.md): the feature, described functionally, with the phase's "done when" | `[Epic] Phase 2 · Vertical slice` | `epic`, phase |
+| **Story** | A functional increment for a real user (analyst, operator, developer), never for a component. Sub-issue of the epic | `[2.1] Live BTCUSDT market data on the fast path` | `story`, phase, area |
+| **Task** | A technical unit of work that ends in one branch and one pull request. Sub-issue of its story | `[2.1.1] Scaffold argus-feed-gateway` | `task`, phase, area |
+
+- **Numbering.** A story takes the next number of its phase (`[2.1]`) and its tasks the next sub-number (`[2.1.1]`). A follow-up found while working on a task becomes a new task of the same story. Work that belongs to no story, such as process changes, is a task directly under the epic (`[2.0]`).
+- **Templates.** **Story** (as a… I want… so that…, acceptance criteria in Given/When/Then, tasks), **Task** (context, scope, acceptance criteria) or **Bug** (what happens, what should happen, how to reproduce). Blank issues are disabled.
+- **Labels.** Every issue gets its phase (`phase:0`, …) and its level (`epic`, `story`, `task`, or `bug`). Stories and tasks also get their area: a service (`feed-gateway`, …) or `build`, `ci`, `contracts`, `docs`, `infra`, `quality`.
+- **One task, one branch, one pull request.** Work found along the way that is not in the scope goes in a new task.
+- **Closing.** A task closes when its pull request is merged. A story closes when all its tasks are closed and its acceptance criteria have been verified, ticking each box. The epic closes when its "done when" holds.
+
+Phases 0 and 1 predate stories: their tasks hang directly from the epic, and their follow-ups took the next sub-number of a task (`[0.7.12]`).
 
 ## Branches
 
