@@ -13,4 +13,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param symbols the shard's instruments, as Binance names them ({@code BTCUSDT})
  */
 @ConfigurationProperties("argus.feed-gateway.binance")
-public record BinanceProperties(URI uri, String apiKey, List<String> symbols) {}
+public record BinanceProperties(URI uri, String apiKey, List<String> symbols) {
+
+  /** Never shows the API key. */
+  @Override
+  public String toString() {
+    return "BinanceProperties[uri=" + uri + ", apiKey=***, symbols=" + symbols + "]";
+  }
+}

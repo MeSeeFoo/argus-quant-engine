@@ -55,7 +55,6 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
   private final RingBuffer frames;
   private final MessageHandler frameHandler = this::onFrame;
   private final HttpClient httpClient = HttpClient.newHttpClient();
-  private final Listener listener = new Listener();
   private CompletableFuture<WebSocket> connection =
       CompletableFuture.failedFuture(new IllegalStateException("not connected yet"));
   private volatile @Nullable WebSocket webSocket;
@@ -108,7 +107,7 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
             .newWebSocketBuilder()
             .header(API_KEY_HEADER, apiKey)
             .connectTimeout(CONNECT_TIMEOUT)
-            .buildAsync(uri, listener)
+            .buildAsync(uri, new Listener())
             .whenComplete(
                 (connected, error) -> {
                   if (error == null) {
@@ -172,13 +171,21 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
     frames.commit(index);
   }
 
-  /** Callbacks of one connection: the JDK calls them one at a time. */
+  /**
+   * Callbacks of one connection: the JDK calls them one at a time. A new connection gets a new
+   * listener, so a frame cut short by a lost connection never leaks into the next one.
+   */
   private final class Listener implements WebSocket.Listener {
 
+    private static final int MAX_TEXT_LENGTH = 4096;
+
     private final UnsafeBuffer view = new UnsafeBuffer(0, 0);
-    // A frame that arrives in several parts is put back together here
+    // A frame that arrives in several parts is put back together here, up to the largest frame
+    // the ring accepts; a longer one is dropped once complete.
+    private final int maxFrameLength = frames.maxMsgLength() - Long.BYTES;
     private final ExpandableArrayBuffer parts = new ExpandableArrayBuffer(4096);
     private int partsLength;
+    private boolean partsTooLong;
     private long receiveTimestamp;
     private final StringBuilder text = new StringBuilder();
 
@@ -190,18 +197,28 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
     @Override
     public @Nullable CompletionStage<?> onBinary(
         WebSocket webSocket, ByteBuffer data, boolean last) {
-      if (partsLength == 0) {
+      boolean firstPart = partsLength == 0 && !partsTooLong;
+      if (firstPart) {
         receiveTimestamp = clock.nanoTime();
       }
-      if (last && partsLength == 0) {
+      if (last && firstPart) {
         view.wrap(data, data.position(), data.remaining());
         enqueue(view, 0, data.remaining(), receiveTimestamp);
       } else {
-        parts.putBytes(partsLength, data, data.position(), data.remaining());
-        partsLength += data.remaining();
+        if (partsLength + data.remaining() > maxFrameLength) {
+          partsTooLong = true;
+        } else if (!partsTooLong) {
+          parts.putBytes(partsLength, data, data.position(), data.remaining());
+          partsLength += data.remaining();
+        }
         if (last) {
-          enqueue(parts, 0, partsLength, receiveTimestamp);
+          if (partsTooLong) {
+            counters.droppedFrame();
+          } else {
+            enqueue(parts, 0, partsLength, receiveTimestamp);
+          }
           partsLength = 0;
+          partsTooLong = false;
         }
       }
       webSocket.request(1);
@@ -212,7 +229,9 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
     @Override
     public @Nullable CompletionStage<?> onText(
         WebSocket webSocket, CharSequence data, boolean last) {
-      text.append(data);
+      if (text.length() < MAX_TEXT_LENGTH) {
+        text.append(data, 0, Math.min(data.length(), MAX_TEXT_LENGTH - text.length()));
+      }
       if (last) {
         LOG.info("Message from Binance: {}", text);
         text.setLength(0);

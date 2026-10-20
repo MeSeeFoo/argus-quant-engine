@@ -132,14 +132,61 @@ class BinanceStreamClientTest {
       int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(i, 1, 1, false));
       session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
     }
-    session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[200])); // larger than a message
+    // Nothing drains the ring yet, so it fills up
+    awaitTrue(() -> counters.droppedFrames() > 0);
     awaitTrue(
         () -> {
           client.poll(100);
-          return publisher.trades.size() + counters.droppedFrames() == sent + 1;
+          return publisher.trades.size() + counters.droppedFrames() == sent;
         });
 
-    assertThat(counters.droppedFrames()).isPositive();
+    assertThat(publisher.trades).hasSizeLessThan(sent);
+  }
+
+  @Test
+  void dropsFramesLargerThanTheRingAccepts() throws Exception {
+    server.accept();
+    client.close();
+    client = connect(1024); // messages of at most 128 bytes
+    Session session = server.accept();
+
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[200]));
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[100]), false);
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[100]), true);
+    int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(3, 1, 1, false));
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
+    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+
+    assertThat(counters.droppedFrames()).as("one whole, one in parts").isEqualTo(2);
+    assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(3L);
+  }
+
+  @Test
+  void startsEachConnectionWithoutTheRestOfAFrameCutShort() throws Exception {
+    Session session = server.accept();
+    int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(4, 1, 1, false));
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length / 2), false);
+    session.close(); // the connection is lost halfway through the frame
+
+    client.connect();
+    Session reconnected = server.accept();
+    reconnected.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
+    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+
+    assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(4L);
+    assertThat(counters.unsupportedMessages()).isZero();
+  }
+
+  @Test
+  void keepsOnlyTheStartOfLongTextFrames() throws Exception {
+    Session session = server.accept();
+
+    session.getBasicRemote().sendText("x".repeat(10_000));
+    int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(5, 1, 1, false));
+    session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
+    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+
+    assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(5L);
   }
 
   @Test
