@@ -38,7 +38,7 @@ Kafka topics are declared in `infra/docker/kafka/topics.conf`; topics are never 
 | `infra/docker/` | | Docker Compose for local development |
 | `docs/adr/` | | Architecture Decision Records |
 
-Only `contracts` and `libs/architecture-rules` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, adapter.in, adapter.out, config}`.
+Only `contracts`, `libs/architecture-rules` and `services/feed-gateway` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, adapter.in, adapter.out, config}`.
 
 ## Vocabulary
 
