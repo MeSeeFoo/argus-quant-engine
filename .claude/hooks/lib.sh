@@ -27,7 +27,7 @@ json_true() {
 
 # is_generated <path>: succeeds for build output and generated code.
 is_generated() {
-  case $(printf '%s' "$1" | tr '\\' '/') in
+  case ${1//\\//} in
     */target/* | target/* | */generated-sources/* | generated-sources/*) return 0 ;;
     *) return 1 ;;
   esac
