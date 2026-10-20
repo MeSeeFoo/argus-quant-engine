@@ -5,3 +5,21 @@ spring:
 server:
   # 8080 is Apicurio in the local environment (infra/docker)
   port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, metrics
+
+argus:
+  feed-gateway:
+    aeron:
+      # Subscribers register with this control endpoint (dynamic multi-destination-cast, ADR 0021).
+      # On AWS it becomes the task's address, found through Cloud Map.
+      # fc=max: the fastest subscriber sets the pace, so a slow one loses data on its own side
+      # instead of slowing the gateway down (ADR 0005).
+      channel: aeron:udp?control=localhost:40456|control-mode=dynamic|fc=max
+      # Shard 1 (ADR 0023)
+      stream-id: 1001
+      heartbeat-interval: 1s

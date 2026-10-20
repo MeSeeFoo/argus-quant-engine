@@ -113,6 +113,11 @@
             <!-- Internal modules -->
             <dependency>
                 <groupId>com.argus</groupId>
+                <artifactId>argus-contracts</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.argus</groupId>
                 <artifactId>argus-architecture-rules</artifactId>
                 <version>${project.version}</version>
             </dependency>

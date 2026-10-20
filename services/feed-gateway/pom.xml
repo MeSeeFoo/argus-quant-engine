@@ -34,6 +34,19 @@
             <groupId>org.agrona</groupId>
             <artifactId>agrona</artifactId>
         </dependency>
+        <!-- Fast path: canonical SBE messages over Aeron, with an embedded Media Driver (ADR 0021) -->
+        <dependency>
+            <groupId>com.argus</groupId>
+            <artifactId>argus-contracts</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.aeron</groupId>
+            <artifactId>aeron-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.aeron</groupId>
+            <artifactId>aeron-driver</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>

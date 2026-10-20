@@ -34,6 +34,31 @@ The gateway reads Binance's [SBE market data stream](https://developers.binance.
 
 Everything rejected is counted in [`MarketDataCounters`](src/main/java/com/argus/feedgateway/application/MarketDataCounters.java). The decoding path allocates nothing per frame; [`BinanceStreamDecoderAllocationTest`](src/test/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoderAllocationTest.java) checks it with the JVM's per-thread allocation counter. Tests build synthetic frames with Binance's encoders: no real market data is committed.
 
+## Publishing on the fast path
+
+[`AeronMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisher.java) (`adapter.out`) implements the `MarketDataPublisher` port: it encodes canonical `Trade`, `BestBidAsk` and `Heartbeat` messages from [`argus-contracts`](../../contracts/README.md) and offers them to an Aeron publication.
+
+- **Transport** ([ADR 0021](../../docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)):
+  - an embedded Media Driver in its own directory, whose threads back off instead of spinning;
+  - one `ExclusivePublication` per shard, over UDP with a dynamic multi-destination-cast control endpoint, where subscribers register. Flow control is `fc=max`: the fastest subscriber sets the pace, and a slower one loses data on its own side (it sees gaps) instead of slowing the gateway down. Those losses are the subscriber's, not counted here.
+- **Sequence.** `Trade` and `BestBidAsk` share one `sequence`, starting at 1.
+- **Never blocks.** When Aeron refuses a message (no subscriber, back-pressure, a closed publication), the message is dropped and counted. It keeps its sequence, so subscribers see the loss as a gap. The one retry is immediate and single, after `ADMIN_ACTION`: the offer reached the end of a term and rotated it without writing the message.
+- **Heartbeat.** The publishing thread calls `heartbeatIfIdle(monotonicNow, epochNow)` on every duty cycle: the monotonic clock schedules the checks, so a wall clock stepping backwards cannot silence the heartbeat, and the epoch clock is written in the message. When nothing was published during a whole interval, it sends a `Heartbeat` with the last sequence and the sender clock. An idle stream therefore carries one every one to two intervals.
+- **Threading and allocation.** Single-threaded and allocation-free, including when subscribers fall behind ([`AeronMarketDataPublisherTest`](src/test/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisherTest.java) runs a real driver and subscriber).
+
+| Property | Default | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed-gateway.aeron.channel` | `aeron:udp?control=localhost:40456\|control-mode=dynamic\|fc=max` | Publication channel. Subscribers use `aeron:udp?endpoint=<their host>:0\|control=<this control endpoint>\|control-mode=dynamic` |
+| `argus.feed-gateway.aeron.stream-id` | `1001` | Stream of shard 1 |
+| `argus.feed-gateway.aeron.heartbeat-interval` | `1s` | Idle time before a `Heartbeat` |
+
+Metrics (`/actuator/metrics`):
+
+| Metric | Tag | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
+| `argus.feed.messages.dropped` | `reason`: `not_connected`, `back_pressured`, `closed`, `other` | Messages dropped instead of blocking |
+
 ## Running it
 
 ```bash
