@@ -20,7 +20,8 @@ import org.agrona.concurrent.UnsafeBuffer;
  *   <li>{@code Trade} and {@code BestBidAsk} share one {@code sequence}, starting at 1. A message
  *       takes its sequence even when it is dropped, so subscribers see the loss as a gap.
  *   <li>It never blocks: when Aeron refuses a message (no subscriber, back-pressure…) the message
- *       is dropped and counted, never retried.
+ *       is dropped and counted. The only retry is a single one after a term rotation, which is not
+ *       a refusal.
  *   <li>{@link #heartbeatIfIdle} sends a {@code Heartbeat} with the last sequence when nothing was
  *       published during a whole interval.
  * </ul>
@@ -43,6 +44,8 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
 
   private long sequence;
   private long nextHeartbeatCheck;
+  // False until the first check, which sends a heartbeat straight away
+  private boolean heartbeatScheduled;
   private boolean publishedSinceLastCheck;
 
   public AeronMarketDataPublisher(
@@ -115,19 +118,24 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
    * published since the previous check, at most once per interval, so an idle stream carries one
    * every one to two intervals.
    *
-   * @param now sender clock, epoch nanoseconds: liveness only, never event time
+   * @param monotonicNow a monotonic clock in nanoseconds ({@link System#nanoTime()}), which
+   *     schedules the checks: a wall clock stepping backwards must not silence the heartbeat
+   * @param epochNow sender clock, epoch nanoseconds, written in the message: liveness only, never
+   *     event time
    * @return 1 if a heartbeat was sent, 0 otherwise (the agent's work count)
    */
-  public int heartbeatIfIdle(long now) {
-    if (now < nextHeartbeatCheck) {
+  public int heartbeatIfIdle(long monotonicNow, long epochNow) {
+    // Compared by difference: nanoTime may be negative, and may wrap
+    if (heartbeatScheduled && monotonicNow - nextHeartbeatCheck < 0) {
       return 0;
     }
-    nextHeartbeatCheck = now + heartbeatIntervalNanos;
+    heartbeatScheduled = true;
+    nextHeartbeatCheck = monotonicNow + heartbeatIntervalNanos;
     if (publishedSinceLastCheck) {
       publishedSinceLastCheck = false;
       return 0;
     }
-    heartbeat.wrapAndApplyHeader(buffer, 0, header).sequence(sequence).timestamp(now);
+    heartbeat.wrapAndApplyHeader(buffer, 0, header).sequence(sequence).timestamp(epochNow);
     if (offer(MessageHeaderEncoder.ENCODED_LENGTH + heartbeat.encodedLength())) {
       counters.countHeartbeat();
     }
@@ -136,6 +144,11 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
 
   private boolean offer(int length) {
     long result = publication.offer(buffer, 0, length);
+    if (result == Publication.ADMIN_ACTION) {
+      // The offer reached the end of a term and rotated it without writing the message. One
+      // immediate retry writes it in the new term: bounded, so it never blocks.
+      result = publication.offer(buffer, 0, length);
+    }
     if (result > 0) {
       return true;
     }
@@ -143,6 +156,8 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
       counters.countDroppedNotConnected();
     } else if (result == Publication.BACK_PRESSURED) {
       counters.countDroppedBackPressured();
+    } else if (result == Publication.CLOSED || result == Publication.MAX_POSITION_EXCEEDED) {
+      counters.countDroppedClosed();
     } else {
       counters.countDroppedOther();
     }

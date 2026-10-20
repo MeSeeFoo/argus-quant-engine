@@ -15,7 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
     webEnvironment = WebEnvironment.RANDOM_PORT,
     // Any free port, so the test never clashes with a gateway running locally
     properties =
-        "argus.feed-gateway.aeron.channel=aeron:udp?control=localhost:0|control-mode=dynamic")
+        "argus.feed-gateway.aeron.channel=aeron:udp?control=localhost:0|control-mode=dynamic|fc=max")
 class FeedGatewayApplicationTest {
 
   @Value("${local.server.port}")

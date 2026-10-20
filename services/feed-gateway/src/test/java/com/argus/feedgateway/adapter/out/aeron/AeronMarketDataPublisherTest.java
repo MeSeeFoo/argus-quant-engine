@@ -15,9 +15,7 @@ import io.aeron.ExclusivePublication;
 import io.aeron.Subscription;
 import io.aeron.driver.MediaDriver;
 import io.aeron.driver.ThreadingMode;
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.DatagramSocket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +44,7 @@ class AeronMarketDataPublisherTest {
   private AeronMarketDataPublisher publisher;
 
   @BeforeEach
-  void startDriver() throws IOException {
+  void startDriver() {
     driver =
         MediaDriver.launchEmbedded(
             new MediaDriver.Context()
@@ -54,10 +52,21 @@ class AeronMarketDataPublisherTest {
                 .dirDeleteOnStart(true)
                 .dirDeleteOnShutdown(true));
     aeron = Aeron.connect(new Aeron.Context().aeronDirectoryName(driver.aeronDirectoryName()));
-    controlEndpoint = "localhost:" + freeUdpPort();
+    open("");
+  }
+
+  /**
+   * Opens the publication with a control endpoint on any free port, and remembers the address the
+   * driver bound so subscribers can register with it.
+   */
+  private void open(String channelParameters) {
+    CloseHelper.close(publication);
     publication =
         aeron.addExclusivePublication(
-            "aeron:udp?control=" + controlEndpoint + "|control-mode=dynamic", STREAM_ID);
+            "aeron:udp?control=localhost:0|control-mode=dynamic|fc=max" + channelParameters,
+            STREAM_ID);
+    awaitTrue(() -> !publication.localSocketAddresses().isEmpty());
+    controlEndpoint = publication.localSocketAddresses().getFirst();
     publisher = new AeronMarketDataPublisher(publication, counters, HEARTBEAT_INTERVAL);
   }
 
@@ -109,28 +118,58 @@ class AeronMarketDataPublisherTest {
   @Test
   void sendsHeartbeatsOnlyWhileIdle() {
     Subscription subscription = subscribe();
-    long start = 1_000_000_000L;
+    // A monotonic clock that is negative, as nanoTime may be, and an unrelated epoch clock
+    long start = -5 * HEARTBEAT_INTERVAL;
+    long epoch = 1_760_000_000_000_000_000L;
 
-    assertThat(publisher.heartbeatIfIdle(start)).as("idle since start").isEqualTo(1);
-    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL - 1)).isZero();
+    assertThat(publisher.heartbeatIfIdle(start, epoch)).as("idle since start").isEqualTo(1);
+    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL - 1, epoch)).isZero();
     publisher.publishTrade(BTCUSDT, 1, 1, 1, 1, 1, AggressorSide.BUY);
-    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL))
+    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL, epoch))
         .as("a trade was published in the interval")
         .isZero();
-    assertThat(publisher.heartbeatIfIdle(start + 2 * HEARTBEAT_INTERVAL)).isEqualTo(1);
-    assertThat(publisher.heartbeatIfIdle(start + 3 * HEARTBEAT_INTERVAL)).isEqualTo(1);
+    assertThat(publisher.heartbeatIfIdle(start + 2 * HEARTBEAT_INTERVAL, epoch + 7)).isEqualTo(1);
+    assertThat(publisher.heartbeatIfIdle(start + 3 * HEARTBEAT_INTERVAL, epoch)).isEqualTo(1);
     receive(subscription, 4);
 
+    assertThat(received)
+        .extracting(message -> header.wrap(message, 0).templateId())
+        .containsExactly(
+            HeartbeatDecoder.TEMPLATE_ID,
+            TradeDecoder.TEMPLATE_ID,
+            HeartbeatDecoder.TEMPLATE_ID,
+            HeartbeatDecoder.TEMPLATE_ID);
     HeartbeatDecoder heartbeat = new HeartbeatDecoder();
     header.wrap(received.get(0), 0);
     heartbeat.wrapAndApplyHeader(received.get(0), 0, header);
     assertThat(heartbeat.sequence()).as("nothing published yet").isZero();
-    assertThat(heartbeat.timestamp()).isEqualTo(start);
+    assertThat(heartbeat.timestamp()).isEqualTo(epoch);
     header.wrap(received.get(2), 0);
     heartbeat.wrapAndApplyHeader(received.get(2), 0, header);
     assertThat(heartbeat.sequence()).as("the last sequence published").isEqualTo(1);
-    assertThat(heartbeat.timestamp()).isEqualTo(start + 2 * HEARTBEAT_INTERVAL);
+    assertThat(heartbeat.timestamp()).as("the epoch clock").isEqualTo(epoch + 7);
     assertThat(counters.heartbeats()).isEqualTo(3);
+  }
+
+  @Test
+  void losesNothingWhenTermsRotate() {
+    // 64 KiB terms hold 512 frames of 128 bytes: 1 500 trades rotate them about three times
+    open("|term-length=64k");
+    Subscription subscription = subscribe();
+    int trades = 1_500;
+
+    for (int i = 1; i <= trades; i++) {
+      publisher.publishTrade(BTCUSDT, i, 1, 1, 1, 1, AggressorSide.BUY);
+      receive(subscription, i);
+    }
+
+    TradeDecoder trade = new TradeDecoder();
+    for (int i = 0; i < trades; i++) {
+      header.wrap(received.get(i), 0);
+      assertThat(trade.wrapAndApplyHeader(received.get(i), 0, header).sequence()).isEqualTo(i + 1L);
+    }
+    assertThat(counters.trades()).isEqualTo(trades);
+    assertThat(counters.droppedOther()).isZero();
   }
 
   @Test
@@ -162,11 +201,8 @@ class AeronMarketDataPublisherTest {
     long allocated = threads.getCurrentThreadAllocatedBytes() - before;
 
     assertThat(counters.droppedBackPressured()).isPositive();
-    assertThat(
-            counters.trades()
-                + counters.bestBidAsks()
-                + counters.droppedBackPressured()
-                + counters.droppedOther())
+    assertThat(counters.droppedOther()).as("term rotations are retried").isZero();
+    assertThat(counters.trades() + counters.bestBidAsks() + counters.droppedBackPressured())
         .as("every message either sent or dropped")
         .isEqualTo(4L * messages);
     assertThat(allocated).isLessThan(1_024);
@@ -217,12 +253,6 @@ class AeronMarketDataPublisherTest {
         throw new AssertionError("timed out");
       }
       Thread.onSpinWait();
-    }
-  }
-
-  private static int freeUdpPort() throws IOException {
-    try (DatagramSocket socket = new DatagramSocket(0)) {
-      return socket.getLocalPort();
     }
   }
 }

@@ -70,6 +70,7 @@ class AeronConfiguration {
       published(registry, counters, "heartbeat", PublicationCounters::heartbeats);
       dropped(registry, counters, "not_connected", PublicationCounters::droppedNotConnected);
       dropped(registry, counters, "back_pressured", PublicationCounters::droppedBackPressured);
+      dropped(registry, counters, "closed", PublicationCounters::droppedClosed);
       dropped(registry, counters, "other", PublicationCounters::droppedOther);
     };
   }

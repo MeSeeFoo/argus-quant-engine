@@ -13,6 +13,7 @@ public final class PublicationCounters {
   private final AtomicLong heartbeats = new AtomicLong();
   private final AtomicLong droppedNotConnected = new AtomicLong();
   private final AtomicLong droppedBackPressured = new AtomicLong();
+  private final AtomicLong droppedClosed = new AtomicLong();
   private final AtomicLong droppedOther = new AtomicLong();
 
   /** {@code Trade} messages handed to Aeron. */
@@ -40,7 +41,14 @@ public final class PublicationCounters {
     return droppedBackPressured.get();
   }
 
-  /** Messages dropped for any other reason: an admin action, or a closed or full publication. */
+  /** Messages dropped because the publication was closed or reached its maximum position. */
+  public long droppedClosed() {
+    return droppedClosed.get();
+  }
+
+  /**
+   * Messages dropped for any other reason, such as an admin action that persisted after a retry.
+   */
   public long droppedOther() {
     return droppedOther.get();
   }
@@ -63,6 +71,10 @@ public final class PublicationCounters {
 
   void countDroppedBackPressured() {
     droppedBackPressured.incrementAndGet();
+  }
+
+  void countDroppedClosed() {
+    droppedClosed.incrementAndGet();
   }
 
   void countDroppedOther() {
