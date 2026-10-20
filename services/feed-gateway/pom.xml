@@ -13,6 +13,12 @@
     <name>Argus :: Services :: Feed Gateway</name>
     <description>Receives market data from the venues and publishes it on the fast path (Aeron + SBE) in the canonical format.</description>
 
+    <properties>
+        <!-- Binance's spot stream schema, unchanged from github.com/binance/binance-spot-api-docs -->
+        <binance.sbe.schema>${project.basedir}/src/main/sbe/binance/stream_1_0.xml</binance.sbe.schema>
+        <binance.sbe.generated.dir>${project.build.directory}/generated-sources/binance-sbe</binance.sbe.generated.dir>
+    </properties>
+
     <dependencies>
         <!-- Actuator over HTTP: health checks and metrics -->
         <dependency>
@@ -52,6 +58,88 @@
 
     <build>
         <plugins>
+            <!-- Generates Binance's codecs from its stream schema. They stay in the gateway: the rest
+                 of the system only sees the canonical contracts (ADR 0004). Sources are never committed. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-binance-codecs</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includeProjectDependencies>false</includeProjectDependencies>
+                    <includePluginDependencies>true</includePluginDependencies>
+                    <mainClass>uk.co.real_logic.sbe.SbeTool</mainClass>
+                    <systemProperties>
+                        <systemProperty>
+                            <key>sbe.output.dir</key>
+                            <value>${binance.sbe.generated.dir}</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <key>sbe.target.language</key>
+                            <value>Java</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <!-- Instead of the schema's own package, spot_stream -->
+                            <key>sbe.target.namespace</key>
+                            <value>com.argus.feedgateway.adapter.in.binance.sbe</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <key>sbe.validation.stop.on.error</key>
+                            <value>true</value>
+                        </systemProperty>
+                        <systemProperty>
+                            <!-- Binance's schema warns (its trades group counts with uint32) and is not ours to fix -->
+                            <key>sbe.validation.warnings.fatal</key>
+                            <value>false</value>
+                        </systemProperty>
+                    </systemProperties>
+                    <arguments>
+                        <argument>${binance.sbe.schema}</argument>
+                    </arguments>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>uk.co.real-logic</groupId>
+                        <artifactId>sbe-tool</artifactId>
+                        <version>${sbe.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-binance-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${binance.sbe.generated.dir}</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Generated codecs are not counted in the coverage report or thresholds. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>com/argus/feedgateway/adapter/in/binance/sbe/**</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
