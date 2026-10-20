@@ -108,7 +108,7 @@ Creates `.env` from `.env.example` and runs `docker compose up -d --wait` in `in
 | **Line endings** | Every file is stored with the line endings set in [`.gitattributes`](../.gitattributes): LF in the repository, converted to CRLF on checkout only for `.cmd` and `.bat` files. Some tools, Dependabot among them, commit CRLF, and Git then shows those files as modified on every checkout. To fix it, run `git add --renormalize .` and commit the result. |
 | **Workflow lint** | [actionlint](https://github.com/rhysd/actionlint) (syntax and types of the workflows) and [zizmor](https://docs.zizmor.sh/) (security: unpinned actions, template injection, excessive permissions…). |
 | **Protobuf contracts** | `buf lint`, `buf format` and `buf breaking` against the target branch, with the rules in [`buf.yaml`](../contracts/src/main/protobuf/buf.yaml). See [Evolving the schemas](../contracts/README.md#evolving-the-schemas). |
-| **Claude Code hooks** | On Linux and Windows, runs [`HookTest.java`](../.claude/hooks/HookTest.java): each hook of [`.claude/settings.json`](../.claude/settings.json) receives the JSON Claude Code would send, and its verdict is checked. See [Claude Code](../CLAUDE.md#claude-code-settings-and-hooks). |
+| **Claude Code hooks** | On Linux and Windows, runs [`test-hooks.sh`](../.claude/hooks/test-hooks.sh): each hook of [`.claude/settings.json`](../.claude/settings.json) receives the JSON Claude Code would send, and its verdict is checked. On Linux, ShellCheck lints the hooks. See [Claude Code](../CLAUDE.md#claude-code-settings-and-hooks). |
 
 ## `release.yml`: versions and releases
 
@@ -177,7 +177,7 @@ A new required check must be added to the ruleset by name (the job's `name:`), a
 | Line endings | `git add --renormalize . && git diff --cached --stat` (lists the files to fix; `git reset` to unstage) |
 | Links | `lychee --offline './**/*.md'` (add no flag to check external links too) |
 | Workflows | `actionlint` and `zizmor .github` |
-| Claude Code hooks | `java .claude/hooks/HookTest.java` |
+| Claude Code hooks | `bash .claude/hooks/test-hooks.sh` |
 | Vulnerabilities | `osv-scanner scan source -r .` |
 
 [buf](https://buf.build/docs/installation/), [lychee](https://lychee.cli.rs/), [actionlint](https://github.com/rhysd/actionlint), [zizmor](https://docs.zizmor.sh/installation/) and [OSV-Scanner](https://google.github.io/osv-scanner/installation/) are optional: CI runs them anyway.

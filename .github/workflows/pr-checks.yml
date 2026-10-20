@@ -153,7 +153,12 @@ jobs:
           java-version: "25"
           cache: maven
 
-      # The hooks in .claude/settings.json are single-file Java programs, so they run the same
-      # on every platform. This feeds each one the JSON Claude Code would send and checks it.
+      # Claude Code runs the hooks with bash: sh on Linux and macOS, Git Bash on Windows.
+      # This feeds each one the JSON Claude Code would send and checks its verdict.
       - name: Run every hook against sample tool calls
-        run: java .claude/hooks/HookTest.java
+        shell: bash
+        run: bash .claude/hooks/test-hooks.sh
+
+      - name: Lint the hooks (ShellCheck)
+        if: runner.os == 'Linux'
+        run: shellcheck --external-sources --source-path=SCRIPTDIR .claude/hooks/*.sh

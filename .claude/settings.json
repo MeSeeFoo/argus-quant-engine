@@ -73,8 +73,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "java",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/ProtectGeneratedCode.java"],
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-generated-code.sh\"",
             "timeout": 30
           }
         ]
@@ -85,8 +85,8 @@
           {
             "type": "command",
             "if": "Bash(git *)",
-            "command": "java",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/GuardGitPush.java"],
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git-push.sh\"",
             "timeout": 30
           }
         ]
@@ -97,8 +97,8 @@
           {
             "type": "command",
             "if": "PowerShell(git *)",
-            "command": "java",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/GuardGitPush.java"],
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git-push.sh\"",
             "timeout": 30
           }
         ]
@@ -109,8 +109,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "java",
-            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/FormatJava.java"],
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-java.sh\"",
             "timeout": 180
           }
         ]

@@ -65,15 +65,15 @@ The [ADRs](docs/adr/README.md) are the source of truth for design. Read the rele
 [`.claude/settings.json`](.claude/settings.json) is shared by every session and agent:
 
 - **Permissions.** Read-only `git` and `gh` commands and `./mvnw` run without asking. Force-pushes, pushes to `main` and `git rebase` are denied.
-- **Hooks**, in [`.claude/hooks`](.claude/hooks), are single-file Java programs run with the JDK the build already needs, so they behave the same on Linux and Windows (Git Bash or PowerShell):
+- **Hooks**, in [`.claude/hooks`](.claude/hooks), are bash scripts with no dependency beyond git and the Maven Wrapper (no `jq`). Claude Code runs them with bash on Linux and macOS, and with Git Bash on Windows, also in sessions that use the PowerShell tool:
 
 | Hook | When | What it does |
 | :--- | :--- | :--- |
-| `FormatJava` | When Claude finishes a turn | Runs `spotless:apply` once on the Java files changed in the working tree, so `verify` never fails on formatting. Formatting once per turn avoids starting Maven after every edit. A file that does not parse is reported back to Claude to fix. |
-| `ProtectGeneratedCode` | Before a file is written or edited | Blocks edits under `target/` and `generated-sources/`, and points to the SBE or Protobuf schema to change instead. |
-| `GuardGitPush` | Before a `git` command in Bash or PowerShell | Blocks force-pushes (`--force`, `-f`, `+refspec`, `--mirror`), pushes to `main` and a bare `git push` while `main` is checked out. |
+| `format-java.sh` | When Claude finishes a turn | Runs `spotless:apply` once on the Java files changed in the working tree, so `verify` never fails on formatting. Formatting once per turn avoids starting Maven after every edit. A file that does not parse is reported back to Claude to fix. |
+| `protect-generated-code.sh` | Before a file is written or edited | Blocks edits under `target/` and `generated-sources/`, and points to the SBE or Protobuf schema to change instead. |
+| `guard-git-push.sh` | Before a `git` command in Bash or PowerShell | Blocks force-pushes (`--force`, `-f`, `+refspec`, `--mirror`), pushes to `main` and a bare `git push` while `main` is checked out. |
 
-`java .claude/hooks/HookTest.java` checks every hook, and CI runs it on Linux and Windows. These guards stop mistakes, not attacks: the ruleset that protects `main` on GitHub is the real boundary. Personal overrides go in `.claude/settings.local.json`, which is git-ignored; a deny rule cannot be overridden there.
+`bash .claude/hooks/test-hooks.sh` checks every hook, and CI runs it on Linux and Windows. These guards stop mistakes, not attacks: the ruleset that protects `main` on GitHub is the real boundary. Personal overrides go in `.claude/settings.local.json`, which is git-ignored; a deny rule cannot be overridden there.
 
 ## Workflow
 
