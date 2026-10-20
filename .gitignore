@@ -37,3 +37,7 @@ target/
 
 # Local environment settings (copy of infra/docker/.env.example)
 .env
+
+# Claude Code: personal settings and the worktrees of desktop sessions
+.claude/settings.local.json
+.claude/worktrees/
