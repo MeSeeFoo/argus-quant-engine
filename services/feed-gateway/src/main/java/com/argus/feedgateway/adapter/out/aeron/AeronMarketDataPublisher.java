@@ -124,6 +124,7 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
    *     event time
    * @return 1 if a heartbeat was sent, 0 otherwise (the agent's work count)
    */
+  @Override
   public int heartbeatIfIdle(long monotonicNow, long epochNow) {
     // Compared by difference: nanoTime may be negative, and may wrap
     if (heartbeatScheduled && monotonicNow - nextHeartbeatCheck < 0) {

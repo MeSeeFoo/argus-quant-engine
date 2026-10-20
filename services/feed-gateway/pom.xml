@@ -83,40 +83,41 @@
                         <goals>
                             <goal>java</goal>
                         </goals>
+                        <!-- Scoped to this execution, so exec:java from the command line keeps its own main class -->
+                        <configuration>
+                            <includeProjectDependencies>false</includeProjectDependencies>
+                            <includePluginDependencies>true</includePluginDependencies>
+                            <mainClass>uk.co.real_logic.sbe.SbeTool</mainClass>
+                            <systemProperties>
+                                <systemProperty>
+                                    <key>sbe.output.dir</key>
+                                    <value>${binance.sbe.generated.dir}</value>
+                                </systemProperty>
+                                <systemProperty>
+                                    <key>sbe.target.language</key>
+                                    <value>Java</value>
+                                </systemProperty>
+                                <systemProperty>
+                                    <!-- Instead of the schema's own package, spot_stream -->
+                                    <key>sbe.target.namespace</key>
+                                    <value>com.argus.feedgateway.adapter.in.binance.sbe</value>
+                                </systemProperty>
+                                <systemProperty>
+                                    <key>sbe.validation.stop.on.error</key>
+                                    <value>true</value>
+                                </systemProperty>
+                                <systemProperty>
+                                    <!-- Binance's schema warns (its trades group counts with uint32) and is not ours to fix -->
+                                    <key>sbe.validation.warnings.fatal</key>
+                                    <value>false</value>
+                                </systemProperty>
+                            </systemProperties>
+                            <arguments>
+                                <argument>${binance.sbe.schema}</argument>
+                            </arguments>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <includeProjectDependencies>false</includeProjectDependencies>
-                    <includePluginDependencies>true</includePluginDependencies>
-                    <mainClass>uk.co.real_logic.sbe.SbeTool</mainClass>
-                    <systemProperties>
-                        <systemProperty>
-                            <key>sbe.output.dir</key>
-                            <value>${binance.sbe.generated.dir}</value>
-                        </systemProperty>
-                        <systemProperty>
-                            <key>sbe.target.language</key>
-                            <value>Java</value>
-                        </systemProperty>
-                        <systemProperty>
-                            <!-- Instead of the schema's own package, spot_stream -->
-                            <key>sbe.target.namespace</key>
-                            <value>com.argus.feedgateway.adapter.in.binance.sbe</value>
-                        </systemProperty>
-                        <systemProperty>
-                            <key>sbe.validation.stop.on.error</key>
-                            <value>true</value>
-                        </systemProperty>
-                        <systemProperty>
-                            <!-- Binance's schema warns (its trades group counts with uint32) and is not ours to fix -->
-                            <key>sbe.validation.warnings.fatal</key>
-                            <value>false</value>
-                        </systemProperty>
-                    </systemProperties>
-                    <arguments>
-                        <argument>${binance.sbe.schema}</argument>
-                    </arguments>
-                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>uk.co.real-logic</groupId>

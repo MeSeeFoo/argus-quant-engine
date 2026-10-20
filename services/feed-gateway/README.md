@@ -59,14 +59,48 @@ Metrics (`/actuator/metrics`):
 | `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
 | `argus.feed.messages.dropped` | `reason`: `not_connected`, `back_pressured`, `closed`, `other` | Messages dropped instead of blocking |
 
+## The Binance connection and the gateway agent
+
+[`BinanceStreamClient`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamClient.java) (`adapter.in`) opens one WebSocket, with the JDK's own client, to the combined stream of every instrument: `wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk`.
+
+- **API key.** It goes in the `X-MBX-APIKEY` header and comes from the `BINANCE_API_KEY` environment variable. It is never logged or committed, and the gateway refuses to start without it. Binance only accepts Ed25519 keys for this stream; a read-only key is enough.
+- **Pings.** Binance pings every 20 seconds and closes the connection after a minute without a pong. The JDK client answers each ping with a pong carrying its payload.
+- **Text frames.** Subscription responses and `serverShutdown` events are logged for now. Reconnecting is story [2.3].
+- **From the connection to the agent.** The connection's callbacks run on the HTTP client's threads. They only copy each binary frame, with its receive time, into a pre-allocated ring buffer (1 MiB, about ten thousand frames), putting frames that arrive in parts back together first. When the ring is full the frame is dropped and counted: the connection never waits.
+
+[`FeedAgent`](src/main/java/com/argus/feedgateway/application/FeedAgent.java) is the gateway's only hot-path thread. On each duty cycle it drains up to 64 frames from the ring (decode, normalise, publish on Aeron), then lets the publisher send a heartbeat if the stream was idle. Everything after the ring is single-threaded and allocation-free.
+
+| Property | Default | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed-gateway.binance.uri` | `wss://stream-sbe.binance.com:9443` | Base address of the stream |
+| `argus.feed-gateway.binance.api-key` | `${BINANCE_API_KEY}` | Read-only Ed25519 API key |
+| `argus.feed-gateway.binance.symbols` | `BTCUSDT` | The shard's instruments |
+
+More metrics: `argus.feed.messages.rejected{reason}` (`unsupported`, `unknown_symbol`, `unrepresentable`, `stale_book`) and `argus.feed.frames.dropped`.
+
 ## Running it
 
+You need a Binance API key: create an Ed25519 key with only *Enable Reading* in Binance's API Management, and export its API key (never the private key, which Argus does not use):
+
 ```bash
+export BINANCE_API_KEY=...
 ./mvnw -pl services/feed-gateway -am install -DskipTests
 ./mvnw -pl services/feed-gateway spring-boot:run
 ```
 
 Actuator listens on port **8081** (8080 is Apicurio in the [local environment](../../README.md#-local-environment)): `http://localhost:8081/actuator/health`.
+
+If the connection fails with `PKIX path building failed` on Windows, the JDK does not trust a certificate authority that Windows does (an antivirus or a corporate proxy that inspects TLS): start the JVM with `-Djavax.net.ssl.trustStoreType=Windows-ROOT`. An `Unexpected HTTP response status code 400` means Binance rejected the API key.
+
+### Checking the fast path by hand
+
+[`FastPathTail`](src/test/java/com/argus/feedgateway/tools/FastPathTail.java) registers with the gateway's control endpoint over UDP and prints every message, like the model engine will. In a second terminal, while the gateway runs:
+
+```bash
+MAVEN_OPTS="--add-exports java.base/jdk.internal.misc=ALL-UNNAMED" ./mvnw -pl services/feed-gateway exec:java -Dexec.classpathScope=test -Dexec.mainClass=com.argus.feedgateway.tools.FastPathTail
+```
+
+Trades and top-of-book updates of BTCUSDT should scroll by, with consecutive sequences. `http://localhost:8081/actuator/metrics/argus.feed.messages.published` counts them.
 
 ### JVM flags
 

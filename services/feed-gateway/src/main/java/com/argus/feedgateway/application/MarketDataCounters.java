@@ -12,6 +12,7 @@ public final class MarketDataCounters {
   private final AtomicLong unknownSymbols = new AtomicLong();
   private final AtomicLong unrepresentableValues = new AtomicLong();
   private final AtomicLong staleBookUpdates = new AtomicLong();
+  private final AtomicLong droppedFrames = new AtomicLong();
 
   /** Frames that are not a supported message of a supported schema, or are malformed. */
   public long unsupportedMessages() {
@@ -35,12 +36,24 @@ public final class MarketDataCounters {
     return staleBookUpdates.get();
   }
 
+  /**
+   * Frames dropped on arrival because the gateway agent had not drained the previous ones: the
+   * connection never waits for the agent.
+   */
+  public long droppedFrames() {
+    return droppedFrames.get();
+  }
+
   public void unsupportedMessage() {
     unsupportedMessages.incrementAndGet();
   }
 
   public void unknownSymbol() {
     unknownSymbols.incrementAndGet();
+  }
+
+  public void droppedFrame() {
+    droppedFrames.incrementAndGet();
   }
 
   void unrepresentableValue() {

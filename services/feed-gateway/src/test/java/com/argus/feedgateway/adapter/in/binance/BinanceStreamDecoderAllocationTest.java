@@ -129,5 +129,10 @@ class BinanceStreamDecoderAllocationTest {
         long receiveTimestamp) {
       bestBidAsks++;
     }
+
+    @Override
+    public int heartbeatIfIdle(long monotonicNow, long epochNow) {
+      return 0;
+    }
   }
 }

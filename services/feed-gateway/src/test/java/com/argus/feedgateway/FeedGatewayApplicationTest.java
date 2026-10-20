@@ -14,8 +14,12 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 @SpringBootTest(
     webEnvironment = WebEnvironment.RANDOM_PORT,
     // Any free port, so the test never clashes with a gateway running locally
-    properties =
-        "argus.feed-gateway.aeron.channel=aeron:udp?control=localhost:0|control-mode=dynamic|fc=max")
+    properties = {
+      "argus.feed-gateway.aeron.channel=aeron:udp?control=localhost:0|control-mode=dynamic|fc=max",
+      // No Binance in tests: the connection fails and is logged, the gateway still starts
+      "argus.feed-gateway.binance.uri=ws://localhost:1",
+      "argus.feed-gateway.binance.api-key=test-key"
+    })
 class FeedGatewayApplicationTest {
 
   @Value("${local.server.port}")
@@ -35,6 +39,9 @@ class FeedGatewayApplicationTest {
         .contains("\"type\"", "trade", "best_bid_ask", "heartbeat");
     assertThat(get("/actuator/metrics/argus.feed.messages.dropped").body())
         .contains("not_connected", "back_pressured", "other");
+    assertThat(get("/actuator/metrics/argus.feed.messages.rejected").body())
+        .contains("unsupported", "unknown_symbol", "unrepresentable", "stale_book");
+    assertThat(get("/actuator/metrics/argus.feed.frames.dropped").statusCode()).isEqualTo(200);
   }
 
   private HttpResponse<String> get(String path) throws Exception {
