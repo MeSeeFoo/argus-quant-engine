@@ -15,5 +15,6 @@
     <description>Aggregator for the modules under services/. Modules are added as they are created.</description>
 
     <modules>
+        <module>feed-gateway</module>
     </modules>
 </project>
