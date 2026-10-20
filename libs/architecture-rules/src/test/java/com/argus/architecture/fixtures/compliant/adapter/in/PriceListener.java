@@ -1,6 +1,6 @@
 package com.argus.architecture.fixtures.compliant.adapter.in;
 
-import com.argus.architecture.fixtures.compliant.application.PublishPrice;
+import com.argus.architecture.fixtures.compliant.application.port.in.PublishPrice;
 
 public class PriceListener {
   private final PublishPrice useCase;

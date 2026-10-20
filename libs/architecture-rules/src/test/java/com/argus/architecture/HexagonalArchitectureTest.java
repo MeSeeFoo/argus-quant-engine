@@ -1,9 +1,11 @@
 package com.argus.architecture;
 
+import static com.argus.architecture.HexagonalArchitecture.ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS;
 import static com.argus.architecture.HexagonalArchitecture.DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS;
 import static com.argus.architecture.HexagonalArchitecture.INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG;
 import static com.argus.architecture.HexagonalArchitecture.LAYERS_MUST_RESPECT_THE_HEXAGON;
 import static com.argus.architecture.HexagonalArchitecture.PACKAGES_MUST_BE_FREE_OF_CYCLES;
+import static com.argus.architecture.HexagonalArchitecture.PORTS_MUST_LIVE_IN_PORT_PACKAGES;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -71,6 +73,14 @@ class HexagonalArchitectureTest {
             "rootusesadapter",
             Set.of(LAYERS_MUST_RESPECT_THE_HEXAGON),
             "adapter.out.OrderRepository"),
+        arguments(
+            "portoutsideportpackage",
+            Set.of(PORTS_MUST_LIVE_IN_PORT_PACKAGES),
+            "application.OrderRepository"),
+        arguments(
+            "adapterusesapplicationservice",
+            Set.of(ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS),
+            "application.PlaceOrder"),
         arguments("cycle", Set.of(PACKAGES_MUST_BE_FREE_OF_CYCLES), "domain.fill.Fill"));
   }
 
