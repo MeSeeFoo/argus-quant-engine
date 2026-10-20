@@ -29,6 +29,7 @@ public final class RecordingPublisher implements MarketDataPublisher {
 
   public final List<Trade> trades = new ArrayList<>();
   public final List<BestBidAsk> bestBidAsks = new ArrayList<>();
+  public final List<long[]> heartbeatChecks = new ArrayList<>();
 
   @Override
   public void publishTrade(
@@ -70,5 +71,11 @@ public final class RecordingPublisher implements MarketDataPublisher {
             askQuantity,
             exchangeTimestamp,
             receiveTimestamp));
+  }
+
+  @Override
+  public int heartbeatIfIdle(long monotonicNow, long epochNow) {
+    heartbeatChecks.add(new long[] {monotonicNow, epochNow});
+    return 0;
   }
 }
