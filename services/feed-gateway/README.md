@@ -4,79 +4,109 @@ Receives market data from a venue and publishes it on the fast path (Aeron + SBE
 
 ## Structure
 
-Hexagonal packages under `com.argus.feedgateway`, checked by [`ArchitectureTest`](src/test/java/com/argus/feedgateway/ArchitectureTest.java) ([ADR 0009](../../docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)):
+Ports and adapters as laid out in [ADR 0009](../../docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md), checked by [`ArchitectureTest`](src/test/java/com/argus/feedgateway/ArchitectureTest.java):
 
-| Package | Content |
-| :--- | :--- |
-| `domain` | Mapping of venue events to the canonical contracts. Plain Java, no allocation in steady state |
-| `application` | Use cases and the ports the adapters implement |
-| `adapter.in` | Market data sources: the venue's live stream, or a recorded session |
-| `adapter.out` | The fast path over Aeron |
-| `config` | Spring wiring |
+```text
+com.argus.feedgateway
+├── domain                   Trade, BestBidAsk (mutable, reused), Instrument(s), Decimal64, BookUpdateFilter
+├── application              MarketDataRelay (the use case), FeedAgent (the thread that runs it), MarketDataCounters
+│   ├── port.in              IngestMarketData: decoded market data, handed to the gateway
+│   └── port.out             MarketDataSource: polled for frames; MarketDataPublisher: the fast path
+├── adapter
+│   ├── in.binance           BinanceStreamClient + BinanceStreamDecoder, with their configuration
+│   └── out.aeron            AeronMarketDataPublisher, with its configuration
+└── config                   Instruments, the use case and the agent: nothing about Binance or Aeron
+```
 
-Spring only builds the agents and starts them, each on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/config/AgentLifecycle.java)). The hot path never runs through beans or proxies ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
+A frame's journey, all of it on the gateway agent's thread except the first step:
 
-## From Binance to canonical messages
+```text
+Binance ──WebSocket──▶ BinanceStreamClient ──ring buffer──▶ FeedAgent.doWork()
+                       (HTTP client threads)                 └─ MarketDataSource.poll()            port.out
+                                                                └─ BinanceStreamDecoder fills a reused Trade
+                                                                   └─ IngestMarketData.onTrade()   port.in
+                                                                      └─ MarketDataRelay validates
+                                                                         └─ MarketDataPublisher    port.out
+                                                                            └─ Aeron, over UDP
+```
 
-The gateway reads Binance's [SBE market data stream](https://developers.binance.com/docs/binance-spot-api-docs/sbe-market-data-streams): the JSON `@bookTicker` stream carries no event time, which the canonical `BestBidAsk` needs ([ADR 0017](../../docs/adr/0017-multi-instrument-models-and-event-time.md)).
+The source is an output port although an inbound adapter implements it: the agent polls it, so the application is the one calling (ADR 0009).
 
-- **Binance's codecs stay here.** [`src/main/sbe/binance/stream_1_0.xml`](src/main/sbe/binance/stream_1_0.xml) is Binance's stream schema, copied unchanged from [binance-spot-api-docs](https://github.com/binance/binance-spot-api-docs/blob/master/sbe/schemas/stream_1_0.xml). `sbe-tool` generates its codecs into `com.argus.feedgateway.adapter.in.binance.sbe` at build time; nothing outside the gateway sees them ([ADR 0004](../../docs/adr/0004-canonical-message-contracts.md)). The schema's own warnings (a `uint32` group count) are not fatal for this schema only.
-- **[`BinanceStreamDecoder`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoder.java)** (`adapter.in`) decodes `TradesStreamEvent` and `BestBidAskStreamEvent` with flyweights. One trades event can carry several trades, each published on its own. Other messages, other schemas, malformed frames and symbols outside the shard are counted and ignored.
-- **[`MarketDataNormaliser`](src/main/java/com/argus/feedgateway/application/MarketDataNormaliser.java)** (`application`) turns the venue's values into canonical ones and hands them to the `MarketDataPublisher` port.
+Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/config/AgentLifecycle.java)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
 
-| Canonical | From Binance |
-| :--- | :--- |
-| `Trade.exchangeTimestamp` | `transactTime` (µs → ns) |
-| `BestBidAsk.exchangeTimestamp` | `eventTime` (µs → ns) |
-| Prices and quantities | mantissa and exponent → `Decimal64` (exponent −8). A value with more than eight decimals or too large for `int64` rejects the whole message, never rounds it ([`Decimal64`](src/main/java/com/argus/feedgateway/domain/Decimal64.java)) |
-| `aggressorSide` | `isBuyerMaker` true → `SELL`, false → `BUY` |
-| `bookUpdateId` | `bookUpdateId`; an update not newer than the last one of its instrument is dropped ([`BookUpdateFilter`](src/main/java/com/argus/feedgateway/domain/BookUpdateFilter.java)) |
-
-Everything rejected is counted in [`MarketDataCounters`](src/main/java/com/argus/feedgateway/application/MarketDataCounters.java). The decoding path allocates nothing per frame; [`BinanceStreamDecoderAllocationTest`](src/test/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoderAllocationTest.java) checks it with the JVM's per-thread allocation counter. Tests build synthetic frames with Binance's encoders: no real market data is committed.
-
-## Publishing on the fast path
-
-[`AeronMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisher.java) (`adapter.out`) implements the `MarketDataPublisher` port: it encodes canonical `Trade`, `BestBidAsk` and `Heartbeat` messages from [`argus-contracts`](../../contracts/README.md) and offers them to an Aeron publication.
-
-- **Transport** ([ADR 0021](../../docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)):
-  - an embedded Media Driver in its own directory, whose threads back off instead of spinning;
-  - one `ExclusivePublication` per shard, over UDP with a dynamic multi-destination-cast control endpoint, where subscribers register. Flow control is `fc=max`: the fastest subscriber sets the pace, and a slower one loses data on its own side (it sees gaps) instead of slowing the gateway down. Those losses are the subscriber's, not counted here.
-- **Sequence.** `Trade` and `BestBidAsk` share one `sequence`, starting at 1.
-- **Never blocks.** When Aeron refuses a message (no subscriber, back-pressure, a closed publication), the message is dropped and counted. It keeps its sequence, so subscribers see the loss as a gap. The one retry is immediate and single, after `ADMIN_ACTION`: the offer reached the end of a term and rotated it without writing the message.
-- **Heartbeat.** The publishing thread calls `heartbeatIfIdle(monotonicNow, epochNow)` on every duty cycle: the monotonic clock schedules the checks, so a wall clock stepping backwards cannot silence the heartbeat, and the epoch clock is written in the message. When nothing was published during a whole interval, it sends a `Heartbeat` with the last sequence and the sender clock. An idle stream therefore carries one every one to two intervals.
-- **Threading and allocation.** Single-threaded and allocation-free, including when subscribers fall behind ([`AeronMarketDataPublisherTest`](src/test/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisherTest.java) runs a real driver and subscriber).
+## The gateway
 
 | Property | Default | Meaning |
 | :--- | :--- | :--- |
-| `argus.feed-gateway.aeron.channel` | `aeron:udp?control=localhost:40456\|control-mode=dynamic\|fc=max` | Publication channel. Subscribers use `aeron:udp?endpoint=<their host>:0\|control=<this control endpoint>\|control-mode=dynamic` |
-| `argus.feed-gateway.aeron.stream-id` | `1001` | Stream of shard 1 |
-| `argus.feed-gateway.aeron.heartbeat-interval` | `1s` | Idle time before a `Heartbeat` |
+| `argus.feed-gateway.instruments` | `BINANCE:BTCUSDT` | The shard's instruments as `VENUE:SYMBOL`, until the instrument catalogue arrives ([ADR 0023](../../docs/adr/0023-instrument-catalogue.md)) |
+| `argus.feed-gateway.heartbeat-interval` | `1s` | Idle time before a `Heartbeat` |
 
-Metrics (`/actuator/metrics`):
+[`MarketDataRelay`](src/main/java/com/argus/feedgateway/application/MarketDataRelay.java) is the use case:
 
-| Metric | Tag | Meaning |
-| :--- | :--- | :--- |
-| `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
-| `argus.feed.messages.dropped` | `reason`: `not_connected`, `back_pressured`, `closed`, `other` | Messages dropped instead of blocking |
+- **Rejections.** A trade or top-of-book update whose prices or quantities do not fit `Decimal64` is rejected as a whole, never rounded. A top-of-book update not newer than the last one of its instrument is dropped ([`BookUpdateFilter`](src/main/java/com/argus/feedgateway/domain/BookUpdateFilter.java)). Both are counted in [`MarketDataCounters`](src/main/java/com/argus/feedgateway/application/MarketDataCounters.java).
+- **Heartbeats.** When nothing was published during a whole interval, it publishes a `Heartbeat`, so an idle stream carries one every one to two intervals. The checks run on a monotonic clock, so a wall clock stepping backwards cannot silence the heartbeat; the message carries the epoch clock.
 
-## The Binance connection and the gateway agent
+[`FeedAgent`](src/main/java/com/argus/feedgateway/application/FeedAgent.java) is the gateway's only hot-path thread. On each duty cycle it polls up to 64 frames from the source, then lets the relay publish a heartbeat if the stream was idle. When there is no work, a back-off idle strategy waits instead of spinning.
 
-[`BinanceStreamClient`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamClient.java) (`adapter.in`) opens one WebSocket, with the JDK's own client, to the combined stream of every instrument: `wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk`.
+Events travel as reused, mutable [`Trade`](src/main/java/com/argus/feedgateway/domain/Trade.java) and [`BestBidAsk`](src/main/java/com/argus/feedgateway/domain/BestBidAsk.java) objects: the decoder fills one per event, and whoever receives it reads it before returning. Nothing is allocated per message, which [`BinanceStreamDecoderAllocationTest`](src/test/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoderAllocationTest.java) checks with the JVM's per-thread allocation counter.
+
+## Inbound adapter: Binance
+
+The gateway reads Binance's [SBE market data stream](https://developers.binance.com/docs/binance-spot-api-docs/sbe-market-data-streams): the JSON `@bookTicker` stream carries no event time, which the canonical `BestBidAsk` needs ([ADR 0017](../../docs/adr/0017-multi-instrument-models-and-event-time.md)). The adapter only reads `BINANCE:` instruments.
+
+**The connection.** [`BinanceStreamClient`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamClient.java) opens one WebSocket, with the JDK's own client, to the combined stream of every instrument: `wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk`.
 
 - **API key.** It goes in the `X-MBX-APIKEY` header and comes from the `BINANCE_API_KEY` environment variable. It is never logged or committed, and the gateway refuses to start without it. Binance only accepts Ed25519 keys for this stream; a read-only key is enough.
 - **Pings.** Binance pings every 20 seconds and closes the connection after a minute without a pong. The JDK client answers each ping with a pong carrying its payload.
 - **Text frames.** Subscription responses and `serverShutdown` events are logged for now. Reconnecting is story [2.3].
 - **From the connection to the agent.** The connection's callbacks run on the HTTP client's threads. They only copy each binary frame, with its receive time, into a pre-allocated ring buffer (1 MiB, about ten thousand frames), putting frames that arrive in parts back together first. When the ring is full the frame is dropped and counted: the connection never waits.
 
-[`FeedAgent`](src/main/java/com/argus/feedgateway/application/FeedAgent.java) is the gateway's only hot-path thread. On each duty cycle it drains up to 64 frames from the ring (decode, normalise, publish on Aeron), then lets the publisher send a heartbeat if the stream was idle. Everything after the ring is single-threaded and allocation-free.
+**Decoding.** [`BinanceStreamDecoder`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoder.java) decodes `TradesStreamEvent` and `BestBidAskStreamEvent` with flyweights, on the agent's thread. One trades event can carry several trades, each handed over on its own. Other messages, other schemas, malformed frames and symbols outside the shard are counted in [`BinanceCounters`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceCounters.java) and ignored.
+
+- **Binance's codecs stay here.** [`src/main/sbe/binance/stream_1_0.xml`](src/main/sbe/binance/stream_1_0.xml) is Binance's stream schema, copied unchanged from [binance-spot-api-docs](https://github.com/binance/binance-spot-api-docs/blob/master/sbe/schemas/stream_1_0.xml).
+- **Generated at build time.** `sbe-tool` generates its codecs into `com.argus.feedgateway.adapter.in.binance.sbe`; nothing outside the gateway sees them ([ADR 0004](../../docs/adr/0004-canonical-message-contracts.md)). The schema's own warnings (a `uint32` group count) are not fatal for this schema only.
+
+| Canonical | From Binance |
+| :--- | :--- |
+| `Trade.exchangeTimestamp` | `transactTime` (µs → ns) |
+| `BestBidAsk.exchangeTimestamp` | `eventTime` (µs → ns) |
+| Prices and quantities | mantissa and exponent → `Decimal64` (exponent −8), exact or not representable ([`Decimal64`](src/main/java/com/argus/feedgateway/domain/Decimal64.java)) |
+| `aggressorSide` | `isBuyerMaker` true → `SELL`, false → `BUY` |
+| `bookUpdateId` | `bookUpdateId` |
+
+Tests build synthetic frames with Binance's encoders, and run the client against a local WebSocket server: no real market data is committed, and CI needs no key.
 
 | Property | Default | Meaning |
 | :--- | :--- | :--- |
 | `argus.feed-gateway.binance.uri` | `wss://stream-sbe.binance.com:9443` | Base address of the stream |
 | `argus.feed-gateway.binance.api-key` | `${BINANCE_API_KEY}` | Read-only Ed25519 API key |
-| `argus.feed-gateway.binance.symbols` | `BTCUSDT` | The shard's instruments |
 
-More metrics: `argus.feed.messages.rejected{reason}` (`unsupported`, `unknown_symbol`, `unrepresentable`, `stale_book`) and `argus.feed.frames.dropped`.
+## Outbound adapter: Aeron
+
+[`AeronMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisher.java) implements the `MarketDataPublisher` port: it encodes canonical `Trade`, `BestBidAsk` and `Heartbeat` messages from [`argus-contracts`](../../contracts/README.md) and offers them to an Aeron publication.
+
+- **Transport** ([ADR 0021](../../docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)):
+  - an embedded Media Driver in its own directory, whose threads back off instead of spinning;
+  - one `ExclusivePublication` per shard, over UDP with a dynamic multi-destination-cast control endpoint, where subscribers register. Flow control is `fc=max`: the fastest subscriber sets the pace, and a slower one loses data on its own side (it sees gaps) instead of slowing the gateway down. Those losses are the subscriber's, not counted here.
+- **Sequence.** `Trade` and `BestBidAsk` share one `sequence`, starting at 1. A `Heartbeat` carries the last one (0 before the first message).
+- **Never blocks.** When Aeron refuses a message (no subscriber, back-pressure, a closed publication), the message is dropped and counted. It keeps its sequence, so subscribers see the loss as a gap. The one retry is immediate and single, after `ADMIN_ACTION`: the offer reached the end of a term and rotated it without writing the message.
+- **Threading and allocation.** Single-threaded and allocation-free, including when subscribers fall behind ([`AeronMarketDataPublisherTest`](src/test/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisherTest.java) runs a real driver and subscriber).
+
+| Property | Default | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed-gateway.aeron.channel` | `aeron:udp?control=localhost:40456\|control-mode=dynamic\|fc=max` | Publication channel. Subscribers use `aeron:udp?endpoint=<their host>:0\|control=<this control endpoint>\|control-mode=dynamic` |
+| `argus.feed-gateway.aeron.stream-id` | `1001` | Stream of shard 1 |
+
+## Metrics
+
+At `/actuator/metrics`:
+
+| Metric | Tag | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
+| `argus.feed.messages.dropped` | `reason`: `not_connected`, `back_pressured`, `closed`, `other` | Messages dropped instead of blocking |
+| `argus.feed.messages.rejected` | `reason`: `unsupported`, `unknown_symbol` (Binance adapter); `unrepresentable`, `stale_book` (gateway) | Venue messages received but not published |
+| `argus.feed.frames.dropped` | | Frames dropped on arrival because the agent was behind |
 
 ## Running it
 

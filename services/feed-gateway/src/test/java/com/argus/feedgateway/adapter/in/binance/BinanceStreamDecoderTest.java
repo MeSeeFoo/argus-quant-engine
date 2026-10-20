@@ -9,7 +9,7 @@ import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderEncoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder.TradesDecoder;
 import com.argus.feedgateway.application.MarketDataCounters;
-import com.argus.feedgateway.application.MarketDataNormaliser;
+import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.RecordingPublisher;
 import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.Instrument;
@@ -29,11 +29,14 @@ class BinanceStreamDecoderTest {
   private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1024]);
   private final BinanceFrames frames = new BinanceFrames();
   private final RecordingPublisher publisher = new RecordingPublisher();
-  private final MarketDataCounters counters = new MarketDataCounters();
+  private final BinanceCounters counters = new BinanceCounters();
+  private final MarketDataCounters relayCounters = new MarketDataCounters();
   private final Instruments instruments = new Instruments(List.of(BTCUSDT));
   private final BinanceStreamDecoder decoder =
       new BinanceStreamDecoder(
-          instruments, new MarketDataNormaliser(instruments, publisher, counters), counters);
+          instruments,
+          new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+          counters);
 
   @Test
   void publishesEveryTradeOfAnEvent() {
@@ -147,7 +150,7 @@ class BinanceStreamDecoderTest {
     assertThat(publisher.trades)
         .extracting(RecordingPublisher.Trade::tradeId)
         .containsExactly(1L, 3L);
-    assertThat(counters.unrepresentableValues()).isEqualTo(1);
+    assertThat(relayCounters.unrepresentableValues()).isEqualTo(1);
   }
 
   @Test

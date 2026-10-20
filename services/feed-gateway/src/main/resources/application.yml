@@ -14,6 +14,19 @@ management:
 
 argus:
   feed-gateway:
+    # What the gateway does, whatever its adapters (ADR 0009)
+    # The shard's instruments as VENUE:SYMBOL, until the instrument catalogue arrives (ADR 0023)
+    instruments: BINANCE:BTCUSDT
+    # A Heartbeat is published when nothing was published this long
+    heartbeat-interval: 1s
+
+    # Inbound adapter: Binance's SBE market data stream
+    binance:
+      uri: wss://stream-sbe.binance.com:9443
+      # Read-only Ed25519 key, from the environment: never commit it
+      api-key: ${BINANCE_API_KEY:}
+
+    # Outbound adapter: the fast path over Aeron
     aeron:
       # Subscribers register with this control endpoint (dynamic multi-destination-cast, ADR 0021).
       # On AWS it becomes the task's address, found through Cloud Map.
@@ -22,9 +35,3 @@ argus:
       channel: aeron:udp?control=localhost:40456|control-mode=dynamic|fc=max
       # Shard 1 (ADR 0023)
       stream-id: 1001
-      heartbeat-interval: 1s
-    binance:
-      uri: wss://stream-sbe.binance.com:9443
-      # Read-only Ed25519 key, from the environment: never commit it
-      api-key: ${BINANCE_API_KEY:}
-      symbols: BTCUSDT

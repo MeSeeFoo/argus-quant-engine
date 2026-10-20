@@ -1,7 +1,6 @@
 package com.argus.feedgateway.adapter.in.binance;
 
-import com.argus.feedgateway.application.MarketDataCounters;
-import com.argus.feedgateway.application.MarketDataSource;
+import com.argus.feedgateway.application.port.out.MarketDataSource;
 import com.argus.feedgateway.domain.Instruments;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -50,7 +49,7 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
   private final URI uri;
   private final String apiKey;
   private final BinanceStreamDecoder decoder;
-  private final MarketDataCounters counters;
+  private final BinanceCounters counters;
   private final EpochNanoClock clock;
   private final RingBuffer frames;
   private final MessageHandler frameHandler = this::onFrame;
@@ -69,7 +68,7 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
       URI uri,
       String apiKey,
       BinanceStreamDecoder decoder,
-      MarketDataCounters counters,
+      BinanceCounters counters,
       EpochNanoClock clock,
       int ringCapacity) {
     if (apiKey.isBlank()) {

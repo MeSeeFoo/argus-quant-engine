@@ -49,4 +49,14 @@ public final class Instruments {
     }
     return UNKNOWN;
   }
+
+  /** Returns the index of {@code instrument}, or {@link #UNKNOWN}. */
+  public int indexOf(Instrument instrument) {
+    for (int i = 0; i < instruments.length; i++) {
+      if (instruments[i].equals(instrument)) {
+        return i;
+      }
+    }
+    return UNKNOWN;
+  }
 }

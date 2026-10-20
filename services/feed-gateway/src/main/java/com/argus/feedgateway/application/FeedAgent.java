@@ -1,13 +1,14 @@
 package com.argus.feedgateway.application;
 
+import com.argus.feedgateway.application.port.out.MarketDataSource;
 import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.EpochNanoClock;
 import org.agrona.concurrent.NanoClock;
 
 /**
- * The gateway's hot path, on a single thread: drains the source (decode, normalise, publish) and
- * keeps the stream alive with heartbeats when the venue is quiet. Plain Java, run by an Agrona
- * {@code AgentRunner} (ADR 0010).
+ * The gateway's work on a single thread: drains the source, whose events reach the {@link
+ * MarketDataRelay}, then lets the relay keep the stream alive. Plain Java, run by an Agrona {@code
+ * AgentRunner} that Spring only starts (ADR 0009, ADR 0010).
  */
 public final class FeedAgent implements Agent {
 
@@ -15,17 +16,17 @@ public final class FeedAgent implements Agent {
   static final int FRAME_LIMIT = 64;
 
   private final MarketDataSource source;
-  private final MarketDataPublisher publisher;
+  private final MarketDataRelay relay;
   private final NanoClock monotonicClock;
   private final EpochNanoClock epochClock;
 
   public FeedAgent(
       MarketDataSource source,
-      MarketDataPublisher publisher,
+      MarketDataRelay relay,
       NanoClock monotonicClock,
       EpochNanoClock epochClock) {
     this.source = source;
-    this.publisher = publisher;
+    this.relay = relay;
     this.monotonicClock = monotonicClock;
     this.epochClock = epochClock;
   }
@@ -33,7 +34,7 @@ public final class FeedAgent implements Agent {
   @Override
   public int doWork() {
     int work = source.poll(FRAME_LIMIT);
-    return work + publisher.heartbeatIfIdle(monotonicClock.nanoTime(), epochClock.nanoTime());
+    return work + relay.heartbeatIfIdle(monotonicClock.nanoTime(), epochClock.nanoTime());
   }
 
   @Override

@@ -1,9 +1,8 @@
-package com.argus.feedgateway.config;
+package com.argus.feedgateway.adapter.in.binance;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class BinancePropertiesTest {
@@ -11,10 +10,10 @@ class BinancePropertiesTest {
   @Test
   void neverShowsTheApiKey() {
     BinanceProperties properties =
-        new BinanceProperties(URI.create("wss://example.test"), "secret-key", List.of("BTCUSDT"));
+        new BinanceProperties(URI.create("wss://example.test"), "secret-key");
 
     assertThat(properties.toString())
         .doesNotContain("secret-key")
-        .contains("wss://example.test", "BTCUSDT", "apiKey=***");
+        .contains("wss://example.test", "apiKey=***");
   }
 }

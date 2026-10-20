@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.argus.feedgateway.adapter.in.binance.BinanceFrames.Trade;
 import com.argus.feedgateway.application.MarketDataCounters;
-import com.argus.feedgateway.application.MarketDataNormaliser;
+import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.RecordingPublisher;
 import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.Instrument;
@@ -34,7 +34,8 @@ class BinanceStreamClientTest {
       new Instruments(
           List.of(new Instrument("BINANCE", "BTCUSDT"), new Instrument("BINANCE", "ETHUSDT")));
   private final RecordingPublisher publisher = new RecordingPublisher();
-  private final MarketDataCounters counters = new MarketDataCounters();
+  private final BinanceCounters counters = new BinanceCounters();
+  private final MarketDataCounters relayCounters = new MarketDataCounters();
   private final BinanceFrames frames = new BinanceFrames();
   private final UnsafeBuffer frame = new UnsafeBuffer(new byte[256]);
 
@@ -248,7 +249,9 @@ class BinanceStreamClientTest {
 
   private BinanceStreamDecoder decoder() {
     return new BinanceStreamDecoder(
-        instruments, new MarketDataNormaliser(instruments, publisher, counters), counters);
+        instruments,
+        new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+        counters);
   }
 
   private static void awaitTrue(BooleanSupplier condition) {

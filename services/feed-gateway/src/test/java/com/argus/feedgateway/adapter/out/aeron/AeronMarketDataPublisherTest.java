@@ -1,7 +1,6 @@
 package com.argus.feedgateway.adapter.out.aeron;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import com.argus.contracts.sbe.BestBidAskDecoder;
 import com.argus.contracts.sbe.HeartbeatDecoder;
@@ -9,7 +8,9 @@ import com.argus.contracts.sbe.MessageHeaderDecoder;
 import com.argus.contracts.sbe.Side;
 import com.argus.contracts.sbe.TradeDecoder;
 import com.argus.feedgateway.domain.AggressorSide;
+import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
+import com.argus.feedgateway.domain.Trade;
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
 import io.aeron.Subscription;
@@ -30,12 +31,13 @@ import org.junit.jupiter.api.Test;
 class AeronMarketDataPublisherTest {
 
   private static final int STREAM_ID = 1001;
-  private static final long HEARTBEAT_INTERVAL = TimeUnit.SECONDS.toNanos(1);
   private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
 
   private final PublicationCounters counters = new PublicationCounters();
   private final List<UnsafeBuffer> received = new ArrayList<>();
   private final MessageHeaderDecoder header = new MessageHeaderDecoder();
+  private final Trade reusedTrade = new Trade();
+  private final BestBidAsk reusedBook = new BestBidAsk();
 
   private MediaDriver driver;
   private Aeron aeron;
@@ -67,7 +69,7 @@ class AeronMarketDataPublisherTest {
             STREAM_ID);
     awaitTrue(() -> !publication.localSocketAddresses().isEmpty());
     controlEndpoint = publication.localSocketAddresses().getFirst();
-    publisher = new AeronMarketDataPublisher(publication, counters, HEARTBEAT_INTERVAL);
+    publisher = new AeronMarketDataPublisher(publication, counters);
   }
 
   @AfterEach
@@ -80,9 +82,18 @@ class AeronMarketDataPublisherTest {
     Subscription subscription = subscribe();
 
     publisher.publishTrade(
-        BTCUSDT, 1001, 6_421_050_000_000L, 12_000_000, 11, 12, AggressorSide.SELL);
+        trade(1001)
+            .price(6_421_050_000_000L, -8)
+            .quantity(12_000_000, -8)
+            .exchangeTimestamp(11)
+            .receiveTimestamp(12)
+            .aggressorSide(AggressorSide.SELL));
     publisher.publishBestBidAsk(
-        BTCUSDT, 77, 6_421_050_000_000L, 3_000, 6_421_051_000_000L, 120_000, 21, 22);
+        book(77)
+            .bid(6_421_050_000_000L, -8, 3_000, -8)
+            .ask(6_421_051_000_000L, -8, 120_000, -8)
+            .exchangeTimestamp(21)
+            .receiveTimestamp(22));
     receive(subscription, 2);
 
     TradeDecoder trade = new TradeDecoder();
@@ -116,29 +127,19 @@ class AeronMarketDataPublisherTest {
   }
 
   @Test
-  void sendsHeartbeatsOnlyWhileIdle() {
+  void heartbeatsCarryTheLastSequenceAndTheSenderClock() {
     Subscription subscription = subscribe();
-    // A monotonic clock that is negative, as nanoTime may be, and an unrelated epoch clock
-    long start = -5 * HEARTBEAT_INTERVAL;
     long epoch = 1_760_000_000_000_000_000L;
 
-    assertThat(publisher.heartbeatIfIdle(start, epoch)).as("idle since start").isEqualTo(1);
-    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL - 1, epoch)).isZero();
-    publisher.publishTrade(BTCUSDT, 1, 1, 1, 1, 1, AggressorSide.BUY);
-    assertThat(publisher.heartbeatIfIdle(start + HEARTBEAT_INTERVAL, epoch))
-        .as("a trade was published in the interval")
-        .isZero();
-    assertThat(publisher.heartbeatIfIdle(start + 2 * HEARTBEAT_INTERVAL, epoch + 7)).isEqualTo(1);
-    assertThat(publisher.heartbeatIfIdle(start + 3 * HEARTBEAT_INTERVAL, epoch)).isEqualTo(1);
-    receive(subscription, 4);
+    publisher.publishHeartbeat(epoch);
+    publisher.publishTrade(trade(1));
+    publisher.publishHeartbeat(epoch + 7);
+    receive(subscription, 3);
 
     assertThat(received)
         .extracting(message -> header.wrap(message, 0).templateId())
         .containsExactly(
-            HeartbeatDecoder.TEMPLATE_ID,
-            TradeDecoder.TEMPLATE_ID,
-            HeartbeatDecoder.TEMPLATE_ID,
-            HeartbeatDecoder.TEMPLATE_ID);
+            HeartbeatDecoder.TEMPLATE_ID, TradeDecoder.TEMPLATE_ID, HeartbeatDecoder.TEMPLATE_ID);
     HeartbeatDecoder heartbeat = new HeartbeatDecoder();
     header.wrap(received.get(0), 0);
     heartbeat.wrapAndApplyHeader(received.get(0), 0, header);
@@ -147,8 +148,8 @@ class AeronMarketDataPublisherTest {
     header.wrap(received.get(2), 0);
     heartbeat.wrapAndApplyHeader(received.get(2), 0, header);
     assertThat(heartbeat.sequence()).as("the last sequence published").isEqualTo(1);
-    assertThat(heartbeat.timestamp()).as("the epoch clock").isEqualTo(epoch + 7);
-    assertThat(counters.heartbeats()).isEqualTo(3);
+    assertThat(heartbeat.timestamp()).isEqualTo(epoch + 7);
+    assertThat(counters.heartbeats()).isEqualTo(2);
   }
 
   @Test
@@ -159,7 +160,7 @@ class AeronMarketDataPublisherTest {
     int trades = 1_500;
 
     for (int i = 1; i <= trades; i++) {
-      publisher.publishTrade(BTCUSDT, i, 1, 1, 1, 1, AggressorSide.BUY);
+      publisher.publishTrade(trade(i));
       receive(subscription, i);
     }
 
@@ -174,12 +175,12 @@ class AeronMarketDataPublisherTest {
 
   @Test
   void dropsWithoutASubscriberAndLeavesAGapInTheSequence() {
-    publisher.publishTrade(BTCUSDT, 1, 1, 1, 1, 1, AggressorSide.BUY);
+    publisher.publishTrade(trade(1));
     assertThat(counters.droppedNotConnected()).isEqualTo(1);
     assertThat(counters.trades()).isZero();
 
     Subscription subscription = subscribe();
-    publisher.publishTrade(BTCUSDT, 2, 1, 1, 1, 1, AggressorSide.BUY);
+    publisher.publishTrade(trade(2));
     receive(subscription, 1);
 
     TradeDecoder trade = new TradeDecoder();
@@ -208,16 +209,32 @@ class AeronMarketDataPublisherTest {
     assertThat(allocated).isLessThan(1_024);
   }
 
-  @Test
-  void requiresAPositiveHeartbeatInterval() {
-    assertThatIllegalArgumentException()
-        .isThrownBy(() -> new AeronMarketDataPublisher(publication, counters, 0));
+  /** A trade of BTCUSDT, in a reused object as the gateway passes them. */
+  private Trade trade(long tradeId) {
+    return reusedTrade
+        .instrument(BTCUSDT)
+        .tradeId(tradeId)
+        .price(1, 0)
+        .quantity(1, 0)
+        .aggressorSide(AggressorSide.BUY)
+        .exchangeTimestamp(1)
+        .receiveTimestamp(1);
+  }
+
+  private BestBidAsk book(long bookUpdateId) {
+    return reusedBook
+        .instrument(BTCUSDT)
+        .bookUpdateId(bookUpdateId)
+        .bid(1, 0, 1, 0)
+        .ask(2, 0, 1, 0)
+        .exchangeTimestamp(1)
+        .receiveTimestamp(1);
   }
 
   private void publishTrades(int count) {
     for (int i = 0; i < count; i++) {
-      publisher.publishTrade(BTCUSDT, i, 1, 1, 1, 1, AggressorSide.BUY);
-      publisher.publishBestBidAsk(BTCUSDT, i, 1, 1, 2, 1, 1, 1);
+      publisher.publishTrade(trade(i));
+      publisher.publishBestBidAsk(book(i));
     }
   }
 

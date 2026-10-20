@@ -27,6 +27,15 @@ public final class Instrument {
     this.symbolBytes = symbol.getBytes(StandardCharsets.US_ASCII);
   }
 
+  /** Parses the {@code VENUE:SYMBOL} key used across Argus ({@code BINANCE:BTCUSDT}). */
+  public static Instrument parse(String key) {
+    int separator = key.indexOf(':');
+    if (separator < 0 || separator != key.lastIndexOf(':')) {
+      throw new IllegalArgumentException("instrument must be VENUE:SYMBOL: '" + key + "'");
+    }
+    return new Instrument(key.substring(0, separator), key.substring(separator + 1));
+  }
+
   public String venue() {
     return venue;
   }
