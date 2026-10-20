@@ -4,7 +4,7 @@
 
     <groupId>com.argus</groupId>
     <artifactId>argus-parent</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <packaging>pom</packaging>
 
     <name>Argus Quant Engine</name>
