@@ -7,7 +7,7 @@ assignees: []
 ---
 
 ## Context
-<!-- Why this is needed. Link the epic or the issue it comes from. -->
+<!-- Why this is needed. Create it as a sub-issue of its story (or of the epic, for work outside any story). -->
 
 ## Scope
 <!-- What is included. Anything left out goes in its own issue. -->
