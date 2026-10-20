@@ -9,7 +9,17 @@ An Architecture Decision Record (ADR) captures one significant design decision: 
 3. Add it to the index below and link it from the README or the guide it affects.
 4. Commit it in the pull request of the issue that takes the decision.
 
-ADRs are **immutable once accepted**. When a decision changes, write a new ADR and mark the old one as *Superseded by* or *Amended by* the new one. Only the status line and those links are edited afterwards.
+ADRs are **immutable once accepted**. When a decision changes, write a new ADR and mark the old one as *Superseded by* or *Amended by* the new one. Only the status line and those links are edited afterwards, with one exception: see the next section.
+
+### Refining an accepted ADR
+
+A decision is often taken before the code that applies it, and its first implementation shows what was left unsaid. While that first implementation is under way, the ADR may be **refined in place**:
+
+- **Only to clarify or complete it,** never to reverse it. A different decision is a new ADR.
+- **Every refinement is recorded** in a *Revisions* section at the end of the ADR (date, issue, what changed), and the *Date* line says it was revised.
+- **The refinement goes in the same pull request** as the issue that motivated it.
+
+Once the first implementation is merged and the decision has been applied as written, the ADR is immutable again.
 
 | Status | Meaning |
 | :--- | :--- |

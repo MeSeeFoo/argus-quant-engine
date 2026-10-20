@@ -38,7 +38,7 @@ Kafka topics are declared in `infra/docker/kafka/topics.conf`; topics are never 
 | `infra/docker/` | | Docker Compose for local development |
 | `docs/adr/` | | Architecture Decision Records |
 
-Only `contracts`, `libs/architecture-rules` and `services/feed-gateway` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, adapter.in, adapter.out, config}`.
+Only `contracts`, `libs/architecture-rules` and `services/feed-gateway` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, application.port.in, application.port.out, adapter.in, adapter.out, config}`; each adapter owns its configuration ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 
 ## Vocabulary
 
@@ -58,7 +58,7 @@ There is no "signal", "signal engine" or "rule runtime" any more: [ADR 0014](doc
 
 ## Design decisions
 
-The [ADRs](docs/adr/README.md) are the source of truth for design. Read the relevant ones before changing a design, and do not contradict them silently. An accepted ADR is **immutable**: to change a decision, write a new ADR that supersedes or amends it, and only update the old one's status line and links.
+The [ADRs](docs/adr/README.md) are the source of truth for design. Read the relevant ones before changing a design, and do not contradict them silently. An accepted ADR is **immutable**: to change a decision, write a new ADR that supersedes or amends it, and only update the old one's status line and links. The one exception: while a decision's first implementation is under way, its ADR may be refined in place to clarify or complete it (never to reverse it), with the change recorded in its *Revisions* section ([how](docs/adr/README.md#refining-an-accepted-adr)).
 
 ## Claude Code settings and hooks
 
