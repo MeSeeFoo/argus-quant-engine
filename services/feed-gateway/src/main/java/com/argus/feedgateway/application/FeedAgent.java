@@ -1,6 +1,6 @@
 package com.argus.feedgateway.application;
 
-import com.argus.feedgateway.application.port.out.MarketDataSource;
+import com.argus.feedgateway.application.port.in.MarketDataSource;
 import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.EpochNanoClock;
 import org.agrona.concurrent.NanoClock;

@@ -1,6 +1,6 @@
 package com.argus.feedgateway.adapter.in.binance;
 
-import com.argus.feedgateway.application.port.out.MarketDataSource;
+import com.argus.feedgateway.application.port.in.MarketDataSource;
 import com.argus.feedgateway.domain.Instruments;
 import java.net.URI;
 import java.net.http.HttpClient;

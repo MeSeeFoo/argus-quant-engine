@@ -10,8 +10,8 @@ Ports and adapters as laid out in [ADR 0009](../../docs/adr/0009-hexagonal-archi
 com.argus.feedgateway
 ├── domain                   Trade, BestBidAsk (mutable, reused), Instrument(s), Decimal64, BookUpdateFilter
 ├── application              MarketDataRelay (the use case), FeedAgent (the thread that runs it), MarketDataCounters
-│   ├── port.in              IngestMarketData: decoded market data, handed to the gateway
-│   └── port.out             MarketDataSource: polled for frames; MarketDataPublisher: the fast path
+│   ├── port.in              MarketDataSource: polled for frames; IngestMarketData: decoded market data
+│   └── port.out             MarketDataPublisher: the fast path
 ├── adapter
 │   ├── in.binance           BinanceStreamClient + BinanceStreamDecoder, with their configuration
 │   └── out.aeron            AeronMarketDataPublisher, with its configuration
@@ -22,7 +22,7 @@ A frame's journey, all of it on the gateway agent's thread except the first step
 
 ```text
 Binance ──WebSocket──▶ BinanceStreamClient ──ring buffer──▶ FeedAgent.doWork()
-                       (HTTP client threads)                 └─ MarketDataSource.poll()            port.out
+                       (HTTP client threads)                 └─ MarketDataSource.poll()            port.in
                                                                 └─ BinanceStreamDecoder fills a reused Trade
                                                                    └─ IngestMarketData.onTrade()   port.in
                                                                       └─ MarketDataRelay validates
@@ -30,7 +30,7 @@ Binance ──WebSocket──▶ BinanceStreamClient ──ring buffer──▶ 
                                                                             └─ Aeron, over UDP
 ```
 
-The source is an output port although an inbound adapter implements it: the agent polls it, so the application is the one calling (ADR 0009).
+Both input ports are where market data enters the gateway, although the agent calls the source and the decoder calls `IngestMarketData`: a port's direction follows the data, not who calls whom (ADR 0009).
 
 Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/config/AgentLifecycle.java)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
 

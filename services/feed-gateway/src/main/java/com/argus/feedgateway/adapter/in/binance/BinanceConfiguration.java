@@ -1,7 +1,7 @@
 package com.argus.feedgateway.adapter.in.binance;
 
 import com.argus.feedgateway.application.port.in.IngestMarketData;
-import com.argus.feedgateway.application.port.out.MarketDataSource;
+import com.argus.feedgateway.application.port.in.MarketDataSource;
 import com.argus.feedgateway.domain.Instruments;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.binder.MeterBinder;

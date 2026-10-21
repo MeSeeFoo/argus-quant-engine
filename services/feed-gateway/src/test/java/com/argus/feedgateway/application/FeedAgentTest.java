@@ -2,7 +2,7 @@ package com.argus.feedgateway.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.argus.feedgateway.application.port.out.MarketDataSource;
+import com.argus.feedgateway.application.port.in.MarketDataSource;
 import com.argus.feedgateway.domain.Instrument;
 import com.argus.feedgateway.domain.Instruments;
 import java.util.List;

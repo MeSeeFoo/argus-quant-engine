@@ -201,16 +201,16 @@ Every service follows the same structure:
 ```text
 com.argus.<service>
 ├── domain             # Pure Java: models, value objects, domain logic. No Spring, no I/O.
-├── application        # Use cases: the services (and agents) that implement the input ports
-│   ├── port.in        # What the outside world asks of the application
-│   └── port.out       # What the application asks of the outside world
+├── application        # Use cases: the services, and the agents that run them
+│   ├── port.in        # Where data enters the service
+│   └── port.out       # Where data leaves the service
 ├── adapter
 │   ├── in.<tech>      # Aeron subscribers, Kafka consumers, REST/WebSocket clients; their own config
 │   └── out.<tech>     # Aeron publishers, Kafka producers, JDBC repositories; their own config
 └── config             # What is generic to the service: use cases, agents, shared settings
 ```
 
-The layout follows Tom Hombergs' *buckpal*. Adapters see the application only through its ports, and each adapter owns its properties and Spring configuration.
+The layout follows Tom Hombergs' *buckpal*. Adapters see the application only through the ports of their direction (`adapter.in` through `port.in`, `adapter.out` through `port.out`), and each adapter owns its properties and Spring configuration.
 
 **ArchUnit** tests enforce the dependency rules in CI. For example, `domain` must not depend on Spring, Aeron or Kafka, and every port lives in `port.in` or `port.out`. The same rule is what keeps the model engine's hot path free of framework code. The rules live in [`libs/architecture-rules`](libs/architecture-rules/README.md), and each service applies them with a single test class ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 

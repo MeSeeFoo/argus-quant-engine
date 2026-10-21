@@ -1,2 +1,2 @@
-/** What the gateway asks of the outside world: implemented by the adapters (ADR 0009). */
+/** Where market data leaves the gateway: implemented by the outbound adapters (ADR 0009). */
 package com.argus.feedgateway.application.port.out;

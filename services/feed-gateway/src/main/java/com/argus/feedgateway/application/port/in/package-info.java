@@ -1,2 +1,5 @@
-/** What the outside world asks of the gateway: implemented by the application (ADR 0009). */
+/**
+ * Where market data enters the gateway, whether the application implements the port or an inbound
+ * adapter does and the agent polls it (ADR 0009).
+ */
 package com.argus.feedgateway.application.port.in;

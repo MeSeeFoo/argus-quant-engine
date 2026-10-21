@@ -2,8 +2,10 @@ package com.argus.architecture;
 
 import static com.argus.architecture.HexagonalArchitecture.ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS;
 import static com.argus.architecture.HexagonalArchitecture.DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS;
+import static com.argus.architecture.HexagonalArchitecture.INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS;
 import static com.argus.architecture.HexagonalArchitecture.INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG;
 import static com.argus.architecture.HexagonalArchitecture.LAYERS_MUST_RESPECT_THE_HEXAGON;
+import static com.argus.architecture.HexagonalArchitecture.OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS;
 import static com.argus.architecture.HexagonalArchitecture.PACKAGES_MUST_BE_FREE_OF_CYCLES;
 import static com.argus.architecture.HexagonalArchitecture.PORTS_MUST_LIVE_IN_PORT_PACKAGES;
 import static java.util.Objects.requireNonNull;
@@ -81,6 +83,14 @@ class HexagonalArchitectureTest {
             "adapterusesapplicationservice",
             Set.of(ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS),
             "application.PlaceOrder"),
+        arguments(
+            "inboundusesoutputport",
+            Set.of(INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS),
+            "application.port.out.OrderRepository"),
+        arguments(
+            "outboundusesinputport",
+            Set.of(OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS),
+            "application.port.in.PlaceOrder"),
         arguments("cycle", Set.of(PACKAGES_MUST_BE_FREE_OF_CYCLES), "domain.fill.Fill"));
   }
 

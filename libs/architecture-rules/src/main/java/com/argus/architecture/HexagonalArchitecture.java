@@ -104,7 +104,7 @@ public final class HexagonalArchitecture {
           .resideInAnyPackage(PORT_IN, PORT_OUT)
           .as("interfaces in application must be ports, in application.port.in or port.out")
           .because(
-              "a port's package says who calls whom: port.in into the application, port.out out")
+              "a port's package says which way data flows: port.in into the service, port.out out")
           .allowEmptyShould(true);
 
   /** The onion rule lets adapters use any application class; only ports are meant for them. */
@@ -118,6 +118,32 @@ public final class HexagonalArchitecture {
               resideInAPackage(APPLICATION).and(not(resideInAnyPackage(PORT_IN, PORT_OUT))))
           .as("adapters must use the application only through its ports")
           .because("a service behind a port can change without touching the adapters")
+          .allowEmptyShould(true);
+
+  /** A port's direction follows the data (ADR 0009): data comes in through input ports only. */
+  @ArchTest
+  public static final ArchRule INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS =
+      noClasses()
+          .that()
+          .resideInAPackage(ADAPTER_IN)
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage(PORT_OUT)
+          .as("inbound adapters must not use output ports")
+          .because("an inbound adapter brings data in, and output ports are where data leaves")
+          .allowEmptyShould(true);
+
+  /** A port's direction follows the data (ADR 0009): data goes out through output ports only. */
+  @ArchTest
+  public static final ArchRule OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS =
+      noClasses()
+          .that()
+          .resideInAPackage(ADAPTER_OUT)
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage(PORT_IN)
+          .as("outbound adapters must not use input ports")
+          .because("an outbound adapter takes data out, and input ports are where data enters")
           .allowEmptyShould(true);
 
   @ArchTest
@@ -137,6 +163,8 @@ public final class HexagonalArchitecture {
         INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG,
         PORTS_MUST_LIVE_IN_PORT_PACKAGES,
         ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS,
+        INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS,
+        OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS,
         PACKAGES_MUST_BE_FREE_OF_CYCLES);
   }
 
