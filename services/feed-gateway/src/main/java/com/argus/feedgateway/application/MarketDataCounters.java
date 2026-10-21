@@ -11,6 +11,7 @@ public final class MarketDataCounters {
 
   private final AtomicLong unrepresentableValues = new AtomicLong();
   private final AtomicLong staleBookUpdates = new AtomicLong();
+  private final AtomicLong unknownInstruments = new AtomicLong();
 
   /**
    * Trades and book updates rejected because a price or quantity does not fit {@code Decimal64}.
@@ -24,11 +25,20 @@ public final class MarketDataCounters {
     return staleBookUpdates.get();
   }
 
+  /** Top-of-book updates for an instrument the gateway does not relay. */
+  public long unknownInstruments() {
+    return unknownInstruments.get();
+  }
+
   void unrepresentableValue() {
     unrepresentableValues.incrementAndGet();
   }
 
   void staleBookUpdate() {
     staleBookUpdates.incrementAndGet();
+  }
+
+  void unknownInstrument() {
+    unknownInstruments.incrementAndGet();
   }
 }

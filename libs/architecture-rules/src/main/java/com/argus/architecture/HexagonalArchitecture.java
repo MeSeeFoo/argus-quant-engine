@@ -92,6 +92,9 @@ public final class HexagonalArchitecture {
       classes()
           .that()
           .areInterfaces()
+          // An annotation is an interface to the JVM, but never a port
+          .and()
+          .areNotAnnotations()
           .and()
           .resideInAPackage(APPLICATION)
           // package-info compiles to a synthetic interface

@@ -68,6 +68,11 @@ class FeedGatewayConfiguration {
           .description("Venue messages received but not published")
           .tag("reason", "stale_book")
           .register(registry);
+      FunctionCounter.builder(
+              "argus.feed.messages.rejected", counters, MarketDataCounters::unknownInstruments)
+          .description("Venue messages received but not published")
+          .tag("reason", "unknown_instrument")
+          .register(registry);
     };
   }
 }

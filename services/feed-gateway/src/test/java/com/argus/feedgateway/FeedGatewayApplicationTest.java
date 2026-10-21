@@ -40,7 +40,8 @@ class FeedGatewayApplicationTest {
     assertThat(get("/actuator/metrics/argus.feed.messages.dropped").body())
         .contains("not_connected", "back_pressured", "other");
     assertThat(get("/actuator/metrics/argus.feed.messages.rejected").body())
-        .contains("unsupported", "unknown_symbol", "unrepresentable", "stale_book");
+        .contains(
+            "unsupported", "unknown_symbol", "unrepresentable", "stale_book", "unknown_instrument");
     assertThat(get("/actuator/metrics/argus.feed.frames.dropped").statusCode()).isEqualTo(200);
   }
 

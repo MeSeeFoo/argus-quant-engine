@@ -105,7 +105,7 @@ At `/actuator/metrics`:
 | :--- | :--- | :--- |
 | `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
 | `argus.feed.messages.dropped` | `reason`: `not_connected`, `back_pressured`, `closed`, `other` | Messages dropped instead of blocking |
-| `argus.feed.messages.rejected` | `reason`: `unsupported`, `unknown_symbol` (Binance adapter); `unrepresentable`, `stale_book` (gateway) | Venue messages received but not published |
+| `argus.feed.messages.rejected` | `reason`: `unsupported`, `unknown_symbol` (Binance adapter); `unrepresentable`, `stale_book`, `unknown_instrument` (gateway) | Venue messages received but not published |
 | `argus.feed.frames.dropped` | | Frames dropped on arrival because the agent was behind |
 
 ## Running it

@@ -45,7 +45,7 @@ com.argus.<service>
 - The domain and the use cases can be tested without Spring, brokers or databases.
 - Port packages make each service's boundary visible at a glance: what it offers (`port.in`) and what it needs (`port.out`).
 - Some boilerplate (ports, a configuration per adapter) even for simple use cases.
-- Replacing an adapter (another venue, a replay instead of a live feed) touches its own package and the line of `config` that chooses it, nothing else.
+- Replacing an adapter (another venue, a replay instead of a live feed) touches its own package, nothing else. When two adapters provide the same port, the choice lives in the adapters themselves (each configuration is conditional on a property), not in `config`.
 
 ## Alternatives considered
 
@@ -62,3 +62,4 @@ This ADR was refined in place while its first implementation (the feed gateway, 
 | Date | Issue | Change |
 | :--- | :--- | :--- |
 | 2026-10-20 | #82 | The layout chosen among the hexagonal variants (buckpal), the mandatory `port.in` and `port.out` packages and their ArchUnit rules, adapters seeing the application only through ports, adapter-owned configuration, and agents as use cases. |
+| 2026-10-21 | #82 | Choosing between two adapters of one port happens in the adapters, conditional on a property, not in `config`. |

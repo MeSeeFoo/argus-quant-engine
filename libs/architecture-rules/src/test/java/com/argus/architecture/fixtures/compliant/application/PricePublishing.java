@@ -4,6 +4,7 @@ import com.argus.architecture.fixtures.compliant.application.port.in.PublishPric
 import com.argus.architecture.fixtures.compliant.application.port.out.PricePublisher;
 import com.argus.architecture.fixtures.compliant.domain.Price;
 
+@UseCase
 public class PricePublishing implements PublishPrice {
   private final PricePublisher publisher;
 

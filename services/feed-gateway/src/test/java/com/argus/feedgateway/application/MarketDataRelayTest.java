@@ -89,6 +89,16 @@ class MarketDataRelayTest {
   }
 
   @Test
+  void dropsTopOfBookUpdatesForUnknownInstruments() {
+    relay.onBestBidAsk(update(new Instrument("BINANCE", "SOLUSDT"), 1));
+    relay.onBestBidAsk(update(new Instrument("COINBASE", "BTCUSDT"), 1));
+
+    assertThat(publisher.bestBidAsks).isEmpty();
+    assertThat(counters.unknownInstruments()).isEqualTo(2);
+    assertThat(counters.staleBookUpdates()).isZero();
+  }
+
+  @Test
   void rejectsTopOfBookUpdatesWithAnyUnrepresentableValue() {
     relay.onBestBidAsk(update(BTCUSDT, 1).bid(1, -9, 0, 0));
     relay.onBestBidAsk(update(BTCUSDT, 2).bid(0, 0, 1, -9));

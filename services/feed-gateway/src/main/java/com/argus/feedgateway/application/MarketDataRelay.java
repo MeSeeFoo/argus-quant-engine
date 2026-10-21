@@ -12,6 +12,8 @@ import com.argus.feedgateway.domain.Trade;
  * alive while the venue is quiet.
  *
  * <ul>
+ *   <li>A top-of-book update for an instrument the gateway does not relay is dropped: the filter of
+ *       stale updates keeps state only for the gateway's instruments.
  *   <li>A trade or top-of-book update whose prices or quantities do not fit {@code Decimal64} is
  *       rejected as a whole, never rounded.
  *   <li>A top-of-book update not newer than the last one of its instrument is dropped.
@@ -62,6 +64,10 @@ public final class MarketDataRelay implements IngestMarketData {
   @Override
   public void onBestBidAsk(BestBidAsk bestBidAsk) {
     int instrument = instruments.indexOf(bestBidAsk.instrument());
+    if (instrument == Instruments.UNKNOWN) {
+      counters.unknownInstrument();
+      return;
+    }
     if (!bookUpdates.accept(instrument, bestBidAsk.bookUpdateId())) {
       counters.staleBookUpdate();
       return;
