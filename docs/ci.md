@@ -36,7 +36,7 @@ Pull request checks run on the result of **merging the branch into `main`**, not
    - `release.yml` opens or updates the release pull request. Nothing is published yet.
    - CodeQL analyses `main`.
 5. **Merge the release pull request when you want to publish a version:** `release.yml` creates the tag (for example `v0.2.0`) and the GitHub Release, and attaches the SBOM.
-6. **That night, around 03:00 UTC:** `nightly.yml` runs on `main`, whether it changed or not. If it fails, it opens or updates an issue.
+6. **That night, around 03:00 UTC:** `nightly.yml` runs on `main`, whether it changed or not. A failing job opens an issue with its error, or comments on the open one if the error is the same; a passing job closes its issue ([Failure issues](#failure-issues)).
 7. **Once a week:** CodeQL analyses `main` again.
 
 ## Running a workflow by hand
@@ -136,7 +136,23 @@ Runs at 03:00 UTC on `main` (GitHub may start it late when busy), or by hand on 
 | **All links** | Every link in the Markdown files, external ones included. |
 | **Known vulnerabilities** | [OSV-Scanner](https://google.github.io/osv-scanner/) on every dependency of every module, transitive and test scope included. It scans the CycloneDX SBOM that Maven builds for the whole reactor, not the `pom.xml` files: OSV-Scanner resolves a `pom.xml` against Maven Central, so a module that depends on another Argus module (not published) cannot be resolved and its dependencies would be skipped. New vulnerabilities are published every day, so this can fail without any code change. |
 
-When a **scheduled** run fails, it opens an issue labelled `nightly-failure`, or comments on the open one. Close the issue once it is fixed.
+### Failure issues
+
+A **scheduled** run reports each job to issues labelled `nightly-failure`, through [`.github/scripts/nightly-failure.sh`](../.github/scripts/nightly-failure.sh). Each failing job fingerprints its error and attaches a report:
+
+| Job | Fingerprint | In the issue |
+| :--- | :--- | :--- |
+| **Build and test on Windows** | Failing test classes, or `build` when it fails outside the tests | Those classes and the `[ERROR]` lines of the Maven log |
+| **All links** | The broken URLs | lychee's report |
+| **Known vulnerabilities** | The advisory IDs | OSV-Scanner's table: package, version, fixed version, CVSS |
+
+The issue keeps the job and a hash of the fingerprint in hidden markers, so there is one open issue per job and error:
+
+- **Same error as an open issue:** a *still failing* comment with the run, no new issue.
+- **New error in the same job:** a new issue, and the job's previous one is closed as superseded. One new advisory or one more broken link is a new error.
+- **The job passes:** its open issues are closed with a link to the green run, so they need no manual closing.
+
+A manual run does not touch issues unless it is started with the `report` input, which is how to test this on a branch: `gh workflow run nightly.yml --ref <branch> -f report=true`. A passing job in that run closes the issues of the same job opened from `main`.
 
 GitHub disables scheduled workflows in public repositories after 60 days without activity; re-enable it from the *Actions* tab if that happens.
 
