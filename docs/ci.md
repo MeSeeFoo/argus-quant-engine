@@ -116,7 +116,7 @@ Uses [release-please](https://github.com/googleapis/release-please), configured 
 
 - On every merge into `main`, it opens or updates **one release pull request** with the next version, computed from the Conventional Commits since the last release, the new section of `CHANGELOG.md`, and the version of every `pom.xml`.
 - Versions follow semantic versioning. Before 1.0.0, `feat` bumps the minor version and a breaking change (`!`) bumps the minor version too; `fix` bumps the patch version.
-- Merging the release pull request creates the tag `vX.Y.Z` and the GitHub Release, and a second job attaches the SBOM of the Maven build (CycloneDX, `argus-sbom.json` and `argus-sbom.xml`).
+- Merging the release pull request creates the tag `vX.Y.Z` and the GitHub Release, and a second job attaches the SBOM of the Maven build (CycloneDX, `argus-sbom.cdx.json` and `argus-sbom.cdx.xml`).
 - `pom.xml` versions are plain release versions (`0.2.0`): there are no `-SNAPSHOT` pull requests after a release.
 
 - The first release is `0.1.0` (`initial-version` in the configuration).
@@ -134,7 +134,7 @@ Runs at 03:00 UTC on `main` (GitHub may start it late when busy), or by hand on 
 | :--- | :--- |
 | **Build and test on Windows** | `mvnw.cmd verify`: line endings, paths and scripts that only fail on Windows. |
 | **All links** | Every link in the Markdown files, external ones included. |
-| **Known vulnerabilities** | [OSV-Scanner](https://google.github.io/osv-scanner/) on the Maven dependencies, transitive ones included. New vulnerabilities are published every day, so this can fail without any code change. |
+| **Known vulnerabilities** | [OSV-Scanner](https://google.github.io/osv-scanner/) on every dependency of every module, transitive and test scope included. It scans the CycloneDX SBOM that Maven builds for the whole reactor, not the `pom.xml` files: OSV-Scanner resolves a `pom.xml` against Maven Central, so a module that depends on another Argus module (not published) cannot be resolved and its dependencies would be skipped. New vulnerabilities are published every day, so this can fail without any code change. |
 
 When a **scheduled** run fails, it opens an issue labelled `nightly-failure`, or comments on the open one. Close the issue once it is fixed.
 
@@ -185,6 +185,6 @@ A new required check must be added to the ruleset by name (the job's `name:`), a
 | Links | `lychee --offline './**/*.md'` (add no flag to check external links too) |
 | Workflows | `actionlint` and `zizmor .github` |
 | Claude Code hooks | `bash .claude/hooks/test-hooks.sh` |
-| Vulnerabilities | `osv-scanner scan source -r .` |
+| Vulnerabilities | `./mvnw -DskipTests -DincludeTestScope=true package cyclonedx:makeAggregateBom`, then `osv-scanner scan source -L target/argus-sbom.cdx.json` |
 
 [buf](https://buf.build/docs/installation/), [lychee](https://lychee.cli.rs/), [actionlint](https://github.com/rhysd/actionlint), [zizmor](https://docs.zizmor.sh/installation/) and [OSV-Scanner](https://google.github.io/osv-scanner/installation/) are optional: CI runs them anyway.

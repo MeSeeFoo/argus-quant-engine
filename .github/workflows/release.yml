@@ -63,4 +63,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: gh release upload "$TAG" target/argus-sbom.json target/argus-sbom.xml --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$TAG" target/argus-sbom.cdx.json target/argus-sbom.cdx.xml --repo "$GITHUB_REPOSITORY"

@@ -283,12 +283,15 @@
                     <version>${sonar-maven-plugin.version}</version>
                 </plugin>
                 <plugin>
-                    <!-- SBOM attached to each GitHub Release: ./mvnw cyclonedx:makeAggregateBom -->
+                    <!-- SBOM of the whole reactor: ./mvnw cyclonedx:makeAggregateBom writes
+                         target/argus-sbom.cdx.json and .cdx.xml. Attached to each GitHub Release, and
+                         scanned every night (with -DincludeTestScope=true) by OSV-Scanner, which only
+                         recognises an SBOM by its *.cdx.json name. -->
                     <groupId>org.cyclonedx</groupId>
                     <artifactId>cyclonedx-maven-plugin</artifactId>
                     <version>${cyclonedx-maven-plugin.version}</version>
                     <configuration>
-                        <outputName>argus-sbom</outputName>
+                        <outputName>argus-sbom.cdx</outputName>
                     </configuration>
                 </plugin>
             </plugins>
