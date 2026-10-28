@@ -1,6 +1,7 @@
 # Checks that are slow, flaky or change without any code change, so they do
 # not block pull requests. Runs every night on main, and by hand on any branch.
-# A failure opens (or updates) an issue labelled nightly-failure. See docs/ci.md.
+# Each failing job gets an issue labelled nightly-failure with its error, one per
+# distinct error, closed when the job passes again. See docs/ci.md.
 name: Nightly
 
 on:
@@ -8,6 +9,11 @@ on:
     # 03:00 UTC. GitHub may start scheduled runs late when it is busy.
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      report:
+        description: Open, update and close nightly-failure issues, as the scheduled run does
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,11 +22,17 @@ concurrency:
 permissions:
   contents: read
 
+# A failing job runs .github/scripts/nightly-failure.sh describe with a fingerprint of
+# its error (advisory IDs, broken URLs, failing test classes) and a Markdown report;
+# its outputs `key` and `details` feed the report job.
 jobs:
   windows-build:
     name: Build and test on Windows
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      key: ${{ steps.describe.outputs.key }}
+      details: ${{ steps.describe.outputs.details }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,12 +47,35 @@ jobs:
 
       - name: Build, test and check formatting, coverage and static analysis
         shell: pwsh
-        run: .\mvnw.cmd --batch-mode --no-transfer-progress verify
+        run: .\mvnw.cmd --batch-mode --no-transfer-progress verify | Tee-Object -FilePath maven.log
+
+      # Fingerprint: the failing test classes, or `build` when it fails outside the tests.
+      - name: Describe the failure
+        id: describe
+        if: failure()
+        shell: bash
+        run: |
+          failed=$( (find . -path '*/target/surefire-reports/*.txt' -exec grep -l 'FAILURE!' {} + || true) | sed 's|.*/||; s|\.txt$||' | sort -u)
+          {
+            if [ -n "$failed" ]; then
+              echo "Failing test classes:"
+              echo
+              printf -- '- `%s`\n' $failed
+              echo
+            fi
+            echo '```'
+            grep -E '^\[ERROR\]' maven.log | head -n 80 || echo "No [ERROR] lines in the Maven log: see the run."
+            echo '```'
+          } > failure.md
+          bash .github/scripts/nightly-failure.sh describe "${failed:-build}" failure.md
 
   external-links:
     name: All links
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      key: ${{ steps.describe.outputs.key }}
+      details: ${{ steps.describe.outputs.details }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,14 +85,30 @@ jobs:
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: "'./**/*.md'"
+          output: lychee/out.md
         env:
           # Avoids GitHub's rate limit on links to github.com.
           GITHUB_TOKEN: ${{ github.token }}
+
+      # Fingerprint: the broken URLs.
+      - name: Describe the failure
+        id: describe
+        if: failure()
+        run: |
+          if [ ! -f lychee/out.md ]; then
+            mkdir -p lychee
+            echo "lychee did not write a report: see the run." > lychee/out.md
+          fi
+          urls=$(grep -E '^\* \[' lychee/out.md | grep -oE 'https?://[^ <>|)]+' | sort -u || true)
+          bash .github/scripts/nightly-failure.sh describe "$urls" lychee/out.md
 
   vulnerabilities:
     name: Known vulnerabilities
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      key: ${{ steps.describe.outputs.key }}
+      details: ${{ steps.describe.outputs.details }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -77,32 +128,65 @@ jobs:
         run: ./mvnw --batch-mode --no-transfer-progress -DskipTests -DincludeTestScope=true package cyclonedx:makeAggregateBom
 
       # New vulnerabilities are published every day, so this can fail without any code change.
+      # The report is Markdown, for the issue; the next step prints it in the log.
       - name: Scan the dependencies (OSV-Scanner)
         uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: |-
+            --format=markdown
+            --output-file=osv-report.md
             --lockfile=target/argus-sbom.cdx.json
 
-  report-failure:
-    name: Report failure
+      # Fingerprint: the advisory IDs.
+      - name: Describe the failure
+        id: describe
+        if: failure()
+        run: |
+          if [ ! -f osv-report.md ]; then
+            echo "OSV-Scanner did not run: the SBOM could not be generated, see the run." > osv-report.md
+          fi
+          cat osv-report.md
+          ids=$(grep -oE 'osv\.dev/[A-Za-z0-9-]+' osv-report.md | sort -u || true)
+          bash .github/scripts/nightly-failure.sh describe "$ids" osv-report.md
+
+  report:
+    name: Report to issues
     needs: [windows-build, external-links, vulnerabilities]
-    # Only for the scheduled run: a manual run is watched by whoever started it.
-    if: ${{ failure() && github.event_name == 'schedule' }}
+    # The scheduled run always reports, to open and to close issues; a manual run only when asked.
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.report) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Open or update the nightly-failure issue
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and test on Windows
+        if: ${{ !cancelled() }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --label nightly-failure --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "Failed again: $RUN_URL"
-          else
-            gh issue create --repo "$GITHUB_REPOSITORY" --label nightly-failure \
-              --title "Nightly pipeline failed" \
-              --body "The nightly pipeline failed: $RUN_URL. Close this issue once it is fixed; the next failure opens a new one."
-          fi
+          RESULT: ${{ needs.windows-build.result }}
+          KEY: ${{ needs.windows-build.outputs.key }}
+          DETAILS: ${{ needs.windows-build.outputs.details }}
+        run: bash .github/scripts/nightly-failure.sh report windows-build "Build and test on Windows"
+
+      - name: All links
+        if: ${{ !cancelled() }}
+        env:
+          RESULT: ${{ needs.external-links.result }}
+          KEY: ${{ needs.external-links.outputs.key }}
+          DETAILS: ${{ needs.external-links.outputs.details }}
+        run: bash .github/scripts/nightly-failure.sh report external-links "All links"
+
+      - name: Known vulnerabilities
+        if: ${{ !cancelled() }}
+        env:
+          RESULT: ${{ needs.vulnerabilities.result }}
+          KEY: ${{ needs.vulnerabilities.outputs.key }}
+          DETAILS: ${{ needs.vulnerabilities.outputs.details }}
+        run: bash .github/scripts/nightly-failure.sh report vulnerabilities "Known vulnerabilities"
