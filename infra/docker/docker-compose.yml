@@ -153,7 +153,7 @@ services:
 
   grafana:
     # All-in-one OpenTelemetry backend: Collector, Prometheus, Tempo, Loki, Pyroscope and Grafana.
-    image: grafana/otel-lgtm:0.36.0
+    image: grafana/otel-lgtm:0.37.0
     ports:
       - "${GRAFANA_PORT:?set in .env}:3000"
       - "${OTLP_GRPC_PORT:?set in .env}:4317"

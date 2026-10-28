@@ -36,7 +36,7 @@ Pull request checks run on the result of **merging the branch into `main`**, not
    - `release.yml` opens or updates the release pull request. Nothing is published yet.
    - CodeQL analyses `main`.
 5. **Merge the release pull request when you want to publish a version:** `release.yml` creates the tag (for example `v0.2.0`) and the GitHub Release, and attaches the SBOM.
-6. **That night, around 03:00 UTC:** `nightly.yml` runs on `main`, whether it changed or not. If it fails, it opens or updates an issue.
+6. **That night, around 03:00 UTC:** `nightly.yml` runs on `main`, whether it changed or not. A failing job opens an issue with its error, or comments on the open one if the error is the same; a passing job closes its issue ([Failure issues](#failure-issues)).
 7. **Once a week:** CodeQL analyses `main` again.
 
 ## Running a workflow by hand
@@ -116,7 +116,7 @@ Uses [release-please](https://github.com/googleapis/release-please), configured 
 
 - On every merge into `main`, it opens or updates **one release pull request** with the next version, computed from the Conventional Commits since the last release, the new section of `CHANGELOG.md`, and the version of every `pom.xml`.
 - Versions follow semantic versioning. Before 1.0.0, `feat` bumps the minor version and a breaking change (`!`) bumps the minor version too; `fix` bumps the patch version.
-- Merging the release pull request creates the tag `vX.Y.Z` and the GitHub Release, and a second job attaches the SBOM of the Maven build (CycloneDX, `argus-sbom.json` and `argus-sbom.xml`).
+- Merging the release pull request creates the tag `vX.Y.Z` and the GitHub Release, and a second job attaches the SBOM of the Maven build (CycloneDX, `argus-sbom.cdx.json` and `argus-sbom.cdx.xml`).
 - `pom.xml` versions are plain release versions (`0.2.0`): there are no `-SNAPSHOT` pull requests after a release.
 
 - The first release is `0.1.0` (`initial-version` in the configuration).
@@ -134,9 +134,25 @@ Runs at 03:00 UTC on `main` (GitHub may start it late when busy), or by hand on 
 | :--- | :--- |
 | **Build and test on Windows** | `mvnw.cmd verify`: line endings, paths and scripts that only fail on Windows. |
 | **All links** | Every link in the Markdown files, external ones included. |
-| **Known vulnerabilities** | [OSV-Scanner](https://google.github.io/osv-scanner/) on the Maven dependencies, transitive ones included. New vulnerabilities are published every day, so this can fail without any code change. |
+| **Known vulnerabilities** | [OSV-Scanner](https://google.github.io/osv-scanner/) on every dependency of every module, transitive and test scope included. It scans the CycloneDX SBOM that Maven builds for the whole reactor, not the `pom.xml` files: OSV-Scanner resolves a `pom.xml` against Maven Central, so a module that depends on another Argus module (not published) cannot be resolved and its dependencies would be skipped. New vulnerabilities are published every day, so this can fail without any code change. |
 
-When a **scheduled** run fails, it opens an issue labelled `nightly-failure`, or comments on the open one. Close the issue once it is fixed.
+### Failure issues
+
+A **scheduled** run reports each job to issues labelled `nightly-failure`, through [`.github/scripts/nightly-failure.sh`](../.github/scripts/nightly-failure.sh). Each failing job fingerprints its error and attaches a report:
+
+| Job | Fingerprint | In the issue |
+| :--- | :--- | :--- |
+| **Build and test on Windows** | Failing test classes, or `build` when it fails outside the tests | Those classes and the `[ERROR]` lines of the Maven log |
+| **All links** | The broken URLs | lychee's report |
+| **Known vulnerabilities** | The advisory IDs | OSV-Scanner's table: package, version, fixed version, CVSS |
+
+The issue keeps the job and a hash of the fingerprint in hidden markers, so there is one open issue per job and error:
+
+- **Same error as an open issue:** a *still failing* comment with the run, no new issue.
+- **New error in the same job:** a new issue, and the job's previous one is closed as superseded. One new advisory or one more broken link is a new error.
+- **The job passes:** its open issues are closed with a link to the green run, so they need no manual closing.
+
+A manual run does not touch issues unless it is started with the `report` input, which is how to test this on a branch: `gh workflow run nightly.yml --ref <branch> -f report=true`. A passing job in that run closes the issues of the same job opened from `main`.
 
 GitHub disables scheduled workflows in public repositories after 60 days without activity; re-enable it from the *Actions* tab if that happens.
 
@@ -185,6 +201,6 @@ A new required check must be added to the ruleset by name (the job's `name:`), a
 | Links | `lychee --offline './**/*.md'` (add no flag to check external links too) |
 | Workflows | `actionlint` and `zizmor .github` |
 | Claude Code hooks | `bash .claude/hooks/test-hooks.sh` |
-| Vulnerabilities | `osv-scanner scan source -r .` |
+| Vulnerabilities | `./mvnw -DskipTests -DincludeTestScope=true package cyclonedx:makeAggregateBom`, then `osv-scanner scan source -L target/argus-sbom.cdx.json` |
 
 [buf](https://buf.build/docs/installation/), [lychee](https://lychee.cli.rs/), [actionlint](https://github.com/rhysd/actionlint), [zizmor](https://docs.zizmor.sh/installation/) and [OSV-Scanner](https://google.github.io/osv-scanner/installation/) are optional: CI runs them anyway.
