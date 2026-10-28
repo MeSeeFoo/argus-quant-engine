@@ -64,7 +64,12 @@ jobs:
               echo
             fi
             echo '```'
-            grep -E '^\[ERROR\]' maven.log | head -n 80 || echo "No [ERROR] lines in the Maven log: see the run."
+            # The [ERROR] lines up to Maven's generic advice, which starts at "-> [Help 1]".
+            if [ -f maven.log ] && grep -q '^\[ERROR\]' maven.log; then
+              awk '/^\[ERROR\] -> \[Help/ { exit } /^\[ERROR\]/ { print }' maven.log | head -n 80
+            else
+              echo "No [ERROR] lines in the Maven log: see the run."
+            fi
             echo '```'
           } > failure.md
           bash .github/scripts/nightly-failure.sh describe "${failed:-build}" failure.md
