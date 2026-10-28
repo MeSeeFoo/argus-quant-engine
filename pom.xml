@@ -51,7 +51,7 @@
         <sonar.exclusions>**/target/generated-sources/**</sonar.exclusions>
 
         <!-- Dependencies: the only place where versions are declared -->
-        <spring-boot.version>4.1.1</spring-boot.version>
+        <spring-boot.version>4.1.2</spring-boot.version>
         <aeron.version>1.53.3</aeron.version>
         <agrona.version>2.7.0</agrona.version>
         <sbe.version>1.41.0</sbe.version>
