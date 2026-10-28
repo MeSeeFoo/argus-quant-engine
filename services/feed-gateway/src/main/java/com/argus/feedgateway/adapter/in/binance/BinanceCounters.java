@@ -4,7 +4,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * What the Binance adapter received but did not hand to the gateway, and why. Written by the
- * connection's threads and the gateway agent, read by metrics from any thread.
+ * connections' threads, read by metrics from any thread.
  */
 public final class BinanceCounters {
 
@@ -22,10 +22,7 @@ public final class BinanceCounters {
     return unknownSymbols.get();
   }
 
-  /**
-   * Frames dropped on arrival because the gateway agent had not drained the previous ones, or
-   * because they were larger than the ring accepts: the connection never waits for the agent.
-   */
+  /** Frames dropped on arrival because they were larger than the adapter accepts. */
   public long droppedFrames() {
     return droppedFrames.get();
   }

@@ -44,15 +44,6 @@ class MarketDataRelayTest {
   }
 
   @Test
-  void rejectsTradesWithUnrepresentableValues() {
-    relay.onTrade(trade.instrument(BTCUSDT).tradeId(1).price(1, -9).quantity(1, -2));
-    relay.onTrade(trade.instrument(BTCUSDT).tradeId(2).price(1, -2).quantity(1, -9));
-
-    assertThat(publisher.trades).isEmpty();
-    assertThat(counters.unrepresentableValues()).isEqualTo(2);
-  }
-
-  @Test
   void publishesTopOfBook() {
     relay.onBestBidAsk(
         book.instrument(BTCUSDT)
@@ -89,27 +80,6 @@ class MarketDataRelayTest {
   }
 
   @Test
-  void dropsTopOfBookUpdatesForUnknownInstruments() {
-    relay.onBestBidAsk(update(new Instrument("BINANCE", "SOLUSDT"), 1));
-    relay.onBestBidAsk(update(new Instrument("COINBASE", "BTCUSDT"), 1));
-
-    assertThat(publisher.bestBidAsks).isEmpty();
-    assertThat(counters.unknownInstruments()).isEqualTo(2);
-    assertThat(counters.staleBookUpdates()).isZero();
-  }
-
-  @Test
-  void rejectsTopOfBookUpdatesWithAnyUnrepresentableValue() {
-    relay.onBestBidAsk(update(BTCUSDT, 1).bid(1, -9, 0, 0));
-    relay.onBestBidAsk(update(BTCUSDT, 2).bid(0, 0, 1, -9));
-    relay.onBestBidAsk(update(BTCUSDT, 3).ask(1, -9, 0, 0));
-    relay.onBestBidAsk(update(BTCUSDT, 4).ask(0, 0, 1, -9));
-
-    assertThat(publisher.bestBidAsks).isEmpty();
-    assertThat(counters.unrepresentableValues()).isEqualTo(4);
-  }
-
-  @Test
   void asksForHeartbeatsOnlyWhileIdle() {
     // A monotonic clock that is negative, as nanoTime may be, and an unrelated epoch clock
     long start = -5 * INTERVAL;
@@ -130,9 +100,10 @@ class MarketDataRelayTest {
   }
 
   @Test
-  void aRejectedMessageDoesNotCountAsActivity() {
-    relay.heartbeatIfIdle(0, 0);
-    relay.onTrade(trade.instrument(BTCUSDT).tradeId(1).price(1, -9).quantity(1, 0));
+  void aStaleUpdateDoesNotCountAsActivity() {
+    relay.onBestBidAsk(update(BTCUSDT, 5));
+    assertThat(relay.heartbeatIfIdle(0, 0)).as("an update was published").isZero();
+    relay.onBestBidAsk(update(BTCUSDT, 5));
 
     assertThat(relay.heartbeatIfIdle(INTERVAL, 1)).isEqualTo(1);
   }

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.argus.feedgateway.adapter.in.binance.BinanceFrames.Trade;
 import com.argus.feedgateway.application.MarketDataCounters;
+import com.argus.feedgateway.application.MarketDataQueue;
 import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.RecordingPublisher;
 import com.argus.feedgateway.domain.AggressorSide;
@@ -24,11 +25,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** The client against a local WebSocket server that stands in for Binance: no key, no network. */
+/**
+ * The client against a local WebSocket server that stands in for Binance: no key, no network. The
+ * test thread plays the gateway agent: it drains the queue the client feeds.
+ */
 class BinanceStreamClientTest {
 
   private static final long RECEIVED = 1_760_000_000_123_456_789L;
-  private static final int RING_CAPACITY = 64 * 1024;
+  private static final int QUEUE_CAPACITY = 64 * 1024;
+  private static final int MAX_FRAME_LENGTH = 64 * 1024;
 
   private final Instruments instruments =
       new Instruments(
@@ -40,12 +45,14 @@ class BinanceStreamClientTest {
   private final UnsafeBuffer frame = new UnsafeBuffer(new byte[256]);
 
   private TestWebSocketServer server;
+  private MarketDataQueue queue;
   private BinanceStreamClient client;
 
   @BeforeEach
   void startServer() throws Exception {
     server = new TestWebSocketServer();
-    client = connect(RING_CAPACITY);
+    queue = newQueue(QUEUE_CAPACITY);
+    client = connect(MAX_FRAME_LENGTH);
   }
 
   @AfterEach
@@ -64,12 +71,12 @@ class BinanceStreamClientTest {
   }
 
   @Test
-  void decodesBinaryFramesOnThePollingThread() throws Exception {
+  void decodesBinaryFramesIntoTheQueue() throws Exception {
     Session session = server.accept();
 
     int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(7, 6421050, 1, true));
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+    awaitTrue(() -> drained() && !publisher.trades.isEmpty());
 
     assertThat(publisher.trades)
         .containsExactly(
@@ -87,7 +94,7 @@ class BinanceStreamClientTest {
     session
         .getBasicRemote()
         .sendBinary(ByteBuffer.wrap(frame.byteArray(), half, length - half), true);
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.bestBidAsks.isEmpty());
+    awaitTrue(() -> drained() && !publisher.bestBidAsks.isEmpty());
 
     assertThat(publisher.bestBidAsks)
         .extracting(RecordingPublisher.BestBidAsk::bookUpdateId)
@@ -114,18 +121,19 @@ class BinanceStreamClientTest {
     session.getBasicRemote().sendText("{\"e\":\"serverShutdown\",\"E\":1770123456789}");
     int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(8, 1, 1, false));
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+    awaitTrue(() -> drained() && !publisher.trades.isEmpty());
 
     assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(8L);
     assertThat(counters.unsupportedMessages()).isZero();
   }
 
   @Test
-  void dropsFramesWhenTheAgentFallsBehind() throws Exception {
+  void dropsEventsWhenTheAgentFallsBehind() throws Exception {
     server.accept(); // the connection opened before each test
     client.close();
-    // 1 KiB of ring holds about ten frames, and one message is at most 128 bytes
-    client = connect(1024);
+    // 1 KiB of queue holds about eighteen trades
+    queue = newQueue(1024);
+    client = connect(MAX_FRAME_LENGTH);
     Session session = server.accept();
 
     int sent = 50;
@@ -133,22 +141,22 @@ class BinanceStreamClientTest {
       int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(i, 1, 1, false));
       session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
     }
-    // Nothing drains the ring yet, so it fills up
-    awaitTrue(() -> counters.droppedFrames() > 0);
+    // Nothing drains the queue yet, so it fills up
+    awaitTrue(() -> relayCounters.droppedEvents() > 0);
     awaitTrue(
         () -> {
-          client.poll(100);
-          return publisher.trades.size() + counters.droppedFrames() == sent;
+          queue.drain(100);
+          return publisher.trades.size() + relayCounters.droppedEvents() == sent;
         });
 
     assertThat(publisher.trades).hasSizeLessThan(sent);
   }
 
   @Test
-  void dropsFramesLargerThanTheRingAccepts() throws Exception {
+  void dropsFramesLargerThanAccepted() throws Exception {
     server.accept();
     client.close();
-    client = connect(1024); // messages of at most 128 bytes
+    client = connect(128);
     Session session = server.accept();
 
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[200]));
@@ -156,7 +164,7 @@ class BinanceStreamClientTest {
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(new byte[100]), true);
     int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(3, 1, 1, false));
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+    awaitTrue(() -> drained() && !publisher.trades.isEmpty());
 
     assertThat(counters.droppedFrames()).as("one whole, one in parts").isEqualTo(2);
     assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(3L);
@@ -172,7 +180,7 @@ class BinanceStreamClientTest {
     client.connect();
     Session reconnected = server.accept();
     reconnected.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+    awaitTrue(() -> drained() && !publisher.trades.isEmpty());
 
     assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(4L);
     assertThat(counters.unsupportedMessages()).isZero();
@@ -185,7 +193,7 @@ class BinanceStreamClientTest {
     session.getBasicRemote().sendText("x".repeat(10_000));
     int length = frames.trades(frame, 0, "BTCUSDT", 1, 2, -2, -8, new Trade(5, 1, 1, false));
     session.getBasicRemote().sendBinary(ByteBuffer.wrap(frame.byteArray(), 0, length));
-    awaitTrue(() -> client.poll(10) > 0 || !publisher.trades.isEmpty());
+    awaitTrue(() -> drained() && !publisher.trades.isEmpty());
 
     assertThat(publisher.trades).extracting(RecordingPublisher.Trade::tradeId).containsExactly(5L);
   }
@@ -194,7 +202,7 @@ class BinanceStreamClientTest {
   void reportsAConnectionThatCannotBeOpened() {
     client.close();
     // Nothing listens on port 1
-    client = connect(URI.create("ws://localhost:1"), RING_CAPACITY);
+    client = connect(URI.create("ws://localhost:1"), MAX_FRAME_LENGTH);
 
     assertThatThrownBy(() -> client.connection().get(10, TimeUnit.SECONDS))
         .isInstanceOf(ExecutionException.class);
@@ -216,7 +224,13 @@ class BinanceStreamClientTest {
         .isThrownBy(
             () ->
                 new BinanceStreamClient(
-                    server.uri(), " ", decoder(), counters, () -> RECEIVED, RING_CAPACITY))
+                    server.uri(),
+                    " ",
+                    instruments,
+                    queue,
+                    counters,
+                    () -> RECEIVED,
+                    MAX_FRAME_LENGTH))
         .withMessageContaining("BINANCE_API_KEY");
   }
 
@@ -230,28 +244,37 @@ class BinanceStreamClientTest {
             "wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk");
   }
 
-  private BinanceStreamClient connect(int ringCapacity) {
-    return connect(server.uri(), ringCapacity);
+  /** Drains the queue as the agent would; always true, to chain with the condition awaited. */
+  private boolean drained() {
+    queue.drain(10);
+    return true;
   }
 
-  private BinanceStreamClient connect(URI base, int ringCapacity) {
+  private MarketDataQueue newQueue(int capacity) {
+    return new MarketDataQueue(
+        instruments,
+        new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+        relayCounters,
+        capacity);
+  }
+
+  /** Connects to the test server, feeding the current queue. */
+  private BinanceStreamClient connect(int maxFrameLength) {
+    return connect(server.uri(), maxFrameLength);
+  }
+
+  private BinanceStreamClient connect(URI base, int maxFrameLength) {
     BinanceStreamClient connected =
         new BinanceStreamClient(
             BinanceStreamClient.streamUri(base, instruments),
             "test-key",
-            decoder(),
+            instruments,
+            queue,
             counters,
             () -> RECEIVED,
-            ringCapacity);
+            maxFrameLength);
     connected.connect();
     return connected;
-  }
-
-  private BinanceStreamDecoder decoder() {
-    return new BinanceStreamDecoder(
-        instruments,
-        new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
-        counters);
   }
 
   private static void awaitTrue(BooleanSupplier condition) {

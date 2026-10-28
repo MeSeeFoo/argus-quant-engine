@@ -19,8 +19,8 @@ import org.agrona.concurrent.UnsafeBuffer;
  * Decodes the binary frames of Binance's SBE market data stream ({@code <symbol>@trade} and {@code
  * <symbol>@bestBidAsk}) with flyweights, fills one reused {@link Trade} or {@link BestBidAsk} per
  * event and hands it to the {@link IngestMarketData} input port. Other messages, other schemas and
- * malformed frames are counted and ignored. One instance per connection; not thread-safe, and
- * allocation-free per frame.
+ * malformed frames are counted and ignored. Runs on the connection's thread: one instance per
+ * connection, not thread-safe, and allocation-free per frame.
  */
 public final class BinanceStreamDecoder {
 

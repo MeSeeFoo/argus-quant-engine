@@ -1,7 +1,6 @@
 package com.argus.feedgateway.adapter.in.binance;
 
 import com.argus.feedgateway.application.port.in.IngestMarketData;
-import com.argus.feedgateway.application.port.in.MarketDataSource;
 import com.argus.feedgateway.domain.Instruments;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.binder.MeterBinder;
@@ -11,9 +10,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * The Binance adapter: a connection to Binance's SBE stream for the gateway's instruments, offered
- * to the gateway as its {@link MarketDataSource}. It owns its properties ({@code
- * argus.feed-gateway.binance.*}) and its metrics; the rest of the gateway only sees the ports.
+ * The Binance adapter: a connection to Binance's SBE stream for the gateway's instruments, which
+ * hands the decoded events to the gateway through {@link IngestMarketData}. It owns its properties
+ * ({@code argus.feed-gateway.binance.*}) and its metrics; the rest of the gateway only sees the
+ * ports.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(BinanceProperties.class)
@@ -21,8 +21,8 @@ class BinanceConfiguration {
 
   static final String VENUE = "BINANCE";
 
-  /** About ten thousand frames between the connection and the gateway agent. */
-  private static final int RING_CAPACITY = 1 << 20;
+  /** A wide margin over the frames of these streams; a longer one is dropped and counted. */
+  private static final int MAX_FRAME_LENGTH = 128 * 1024;
 
   @Bean
   BinanceCounters binanceCounters() {
@@ -45,10 +45,11 @@ class BinanceConfiguration {
     return new BinanceStreamClient(
         BinanceStreamClient.streamUri(properties.uri(), instruments),
         properties.apiKey(),
-        new BinanceStreamDecoder(instruments, ingestMarketData, counters),
+        instruments,
+        ingestMarketData,
         counters,
         new SystemEpochNanoClock(),
-        RING_CAPACITY);
+        MAX_FRAME_LENGTH);
   }
 
   @Bean
@@ -65,7 +66,7 @@ class BinanceConfiguration {
           .tag("reason", "unknown_symbol")
           .register(registry);
       FunctionCounter.builder("argus.feed.frames.dropped", counters, BinanceCounters::droppedFrames)
-          .description("Frames dropped on arrival because the gateway agent was behind")
+          .description("Frames dropped on arrival because they were larger than accepted")
           .register(registry);
     };
   }

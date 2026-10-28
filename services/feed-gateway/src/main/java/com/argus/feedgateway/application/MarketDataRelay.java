@@ -1,6 +1,5 @@
 package com.argus.feedgateway.application;
 
-import com.argus.feedgateway.application.port.in.IngestMarketData;
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.BookUpdateFilter;
@@ -8,22 +7,20 @@ import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
 
 /**
- * The gateway's use case: relays the venue's market data to the fast path, and keeps the stream
- * alive while the venue is quiet.
+ * The gateway's use case: relays the venue's market data, drained from the {@link MarketDataQueue},
+ * to the fast path, and keeps the stream alive while the venue is quiet.
  *
  * <ul>
- *   <li>A top-of-book update for an instrument the gateway does not relay is dropped: the filter of
- *       stale updates keeps state only for the gateway's instruments.
- *   <li>A trade or top-of-book update whose prices or quantities do not fit {@code Decimal64} is
- *       rejected as a whole, never rounded.
- *   <li>A top-of-book update not newer than the last one of its instrument is dropped.
+ *   <li>A top-of-book update not newer than the last one of its instrument is dropped. The queue
+ *       has already rejected what can be judged on its own (unknown instruments, values that do not
+ *       fit {@code Decimal64}); this check needs the state of each instrument, so it runs here.
  *   <li>{@link #heartbeatIfIdle} asks for a heartbeat when nothing was published during a whole
  *       interval, so an idle stream carries one every one to two intervals.
  * </ul>
  *
  * <p>Runs on the gateway agent's thread, without allocating.
  */
-public final class MarketDataRelay implements IngestMarketData {
+public final class MarketDataRelay {
 
   private final Instruments instruments;
   private final MarketDataPublisher publisher;
@@ -51,29 +48,17 @@ public final class MarketDataRelay implements IngestMarketData {
     this.heartbeatIntervalNanos = heartbeatIntervalNanos;
   }
 
-  @Override
+  /** Publishes a trade of one of the gateway's instruments. */
   public void onTrade(Trade trade) {
-    if (!trade.isRepresentable()) {
-      counters.unrepresentableValue();
-      return;
-    }
     publisher.publishTrade(trade);
     publishedSinceLastCheck = true;
   }
 
-  @Override
+  /** Publishes a top-of-book update of one of the gateway's instruments, unless it is stale. */
   public void onBestBidAsk(BestBidAsk bestBidAsk) {
     int instrument = instruments.indexOf(bestBidAsk.instrument());
-    if (instrument == Instruments.UNKNOWN) {
-      counters.unknownInstrument();
-      return;
-    }
     if (!bookUpdates.accept(instrument, bestBidAsk.bookUpdateId())) {
       counters.staleBookUpdate();
-      return;
-    }
-    if (!bestBidAsk.isRepresentable()) {
-      counters.unrepresentableValue();
       return;
     }
     publisher.publishBestBidAsk(bestBidAsk);

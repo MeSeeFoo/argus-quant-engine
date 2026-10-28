@@ -38,7 +38,7 @@ class FeedGatewayApplicationTest {
     assertThat(get("/actuator/metrics/argus.feed.messages.published").body())
         .contains("\"type\"", "trade", "best_bid_ask", "heartbeat");
     assertThat(get("/actuator/metrics/argus.feed.messages.dropped").body())
-        .contains("not_connected", "back_pressured", "other");
+        .contains("not_connected", "back_pressured", "other", "queue_full");
     assertThat(get("/actuator/metrics/argus.feed.messages.rejected").body())
         .contains(
             "unsupported", "unknown_symbol", "unrepresentable", "stale_book", "unknown_instrument");

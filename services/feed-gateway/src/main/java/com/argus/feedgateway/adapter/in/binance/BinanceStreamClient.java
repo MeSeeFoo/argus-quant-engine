@@ -1,6 +1,6 @@
 package com.argus.feedgateway.adapter.in.binance;
 
-import com.argus.feedgateway.application.port.in.MarketDataSource;
+import com.argus.feedgateway.application.port.in.IngestMarketData;
 import com.argus.feedgateway.domain.Instruments;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,13 +16,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.agrona.DirectBuffer;
 import org.agrona.ExpandableArrayBuffer;
-import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.EpochNanoClock;
-import org.agrona.concurrent.MessageHandler;
 import org.agrona.concurrent.UnsafeBuffer;
-import org.agrona.concurrent.ringbuffer.ManyToOneRingBuffer;
-import org.agrona.concurrent.ringbuffer.RingBuffer;
-import org.agrona.concurrent.ringbuffer.RingBufferDescriptor;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,29 +25,28 @@ import org.slf4j.LoggerFactory;
 /**
  * Connection to Binance's SBE market data stream, with the JDK's WebSocket client.
  *
- * <p>The connection's callbacks run on the HTTP client's threads. They only copy each binary frame,
- * with the time it was received, into a pre-allocated ring buffer, and never wait: when the ring is
- * full the frame is dropped and counted. The gateway agent drains the ring with {@link #poll} and
- * decodes on its own thread, so decoding and publishing stay single-threaded and allocation-free.
+ * <p>The connection's callbacks run on the HTTP client's threads. Each binary frame, once complete,
+ * is decoded there, with the time it was received, and its events are handed to the gateway through
+ * {@link IngestMarketData}, which queues them and never waits. Each connection has its own decoder,
+ * so two connections never share one.
  *
  * <p>The API key goes in the {@code X-MBX-APIKEY} header and is never logged. Pings are answered by
  * the JDK client, which sends a pong with the ping's payload.
  */
-public final class BinanceStreamClient implements MarketDataSource, AutoCloseable {
+public final class BinanceStreamClient implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(BinanceStreamClient.class);
   private static final String API_KEY_HEADER = "X-MBX-APIKEY";
-  private static final int FRAME_MESSAGE = 1;
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(2);
 
   private final URI uri;
   private final String apiKey;
-  private final BinanceStreamDecoder decoder;
+  private final Instruments instruments;
+  private final IngestMarketData ingest;
   private final BinanceCounters counters;
   private final EpochNanoClock clock;
-  private final RingBuffer frames;
-  private final MessageHandler frameHandler = this::onFrame;
+  private final int maxFrameLength;
   private final HttpClient httpClient = HttpClient.newHttpClient();
   private CompletableFuture<WebSocket> connection =
       CompletableFuture.failedFuture(new IllegalStateException("not connected yet"));
@@ -62,28 +56,27 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
    * Creates a client; nothing is opened until {@link #connect}.
    *
    * @param uri the stream to read, see {@link #streamUri}
-   * @param ringCapacity bytes of the ring between the connection and the agent; a power of two
+   * @param maxFrameLength bytes of the largest frame accepted; a longer one is dropped and counted
    */
   public BinanceStreamClient(
       URI uri,
       String apiKey,
-      BinanceStreamDecoder decoder,
+      Instruments instruments,
+      IngestMarketData ingest,
       BinanceCounters counters,
       EpochNanoClock clock,
-      int ringCapacity) {
+      int maxFrameLength) {
     if (apiKey.isBlank()) {
       throw new IllegalArgumentException(
           "A Binance API key is required: set BINANCE_API_KEY (see the feed gateway README)");
     }
     this.uri = uri;
     this.apiKey = apiKey;
-    this.decoder = decoder;
+    this.instruments = instruments;
+    this.ingest = ingest;
     this.counters = counters;
     this.clock = clock;
-    this.frames =
-        new ManyToOneRingBuffer(
-            new UnsafeBuffer(
-                ByteBuffer.allocateDirect(ringCapacity + RingBufferDescriptor.TRAILER_LENGTH)));
+    this.maxFrameLength = maxFrameLength;
   }
 
   /**
@@ -123,11 +116,6 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
     return connection;
   }
 
-  @Override
-  public int poll(int limit) {
-    return frames.read(frameHandler, limit);
-  }
-
   /** Closes the connection politely, then stops the HTTP client. */
   @Override
   public void close() {
@@ -148,40 +136,20 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
     httpClient.shutdownNow();
   }
 
-  private void onFrame(int messageType, MutableDirectBuffer buffer, int index, int length) {
-    decoder.onFrame(buffer, index + Long.BYTES, length - Long.BYTES, buffer.getLong(index));
-  }
-
-  /** Copies a frame into the ring, after its receive time. Never waits. */
-  private void enqueue(DirectBuffer frame, int offset, int length, long receiveTimestamp) {
-    int messageLength = Long.BYTES + length;
-    if (messageLength > frames.maxMsgLength()) {
-      counters.droppedFrame();
-      return;
-    }
-    int index = frames.tryClaim(FRAME_MESSAGE, messageLength);
-    if (index < 0) {
-      counters.droppedFrame();
-      return;
-    }
-    MutableDirectBuffer ring = frames.buffer();
-    ring.putLong(index, receiveTimestamp);
-    ring.putBytes(index + Long.BYTES, frame, offset, length);
-    frames.commit(index);
-  }
-
   /**
-   * Callbacks of one connection: the JDK calls them one at a time. A new connection gets a new
-   * listener, so a frame cut short by a lost connection never leaks into the next one.
+   * Callbacks of one connection: the JDK calls them one at a time, so the connection's decoder is
+   * never used by two threads at once. A new connection gets a new listener, so a frame cut short
+   * by a lost connection never leaks into the next one.
    */
   private final class Listener implements WebSocket.Listener {
 
     private static final int MAX_TEXT_LENGTH = 4096;
 
+    private final BinanceStreamDecoder decoder =
+        new BinanceStreamDecoder(instruments, ingest, counters);
     private final UnsafeBuffer view = new UnsafeBuffer(0, 0);
     // A frame that arrives in several parts is put back together here, up to the largest frame
-    // the ring accepts; a longer one is dropped once complete.
-    private final int maxFrameLength = frames.maxMsgLength() - Long.BYTES;
+    // accepted; a longer one is dropped once complete.
     private final ExpandableArrayBuffer parts = new ExpandableArrayBuffer(4096);
     private int partsLength;
     private boolean partsTooLong;
@@ -201,8 +169,12 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
         receiveTimestamp = clock.nanoTime();
       }
       if (last && firstPart) {
-        view.wrap(data, data.position(), data.remaining());
-        enqueue(view, 0, data.remaining(), receiveTimestamp);
+        if (data.remaining() > maxFrameLength) {
+          counters.droppedFrame();
+        } else {
+          view.wrap(data, data.position(), data.remaining());
+          decode(view, data.remaining());
+        }
       } else {
         if (partsLength + data.remaining() > maxFrameLength) {
           partsTooLong = true;
@@ -214,7 +186,7 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
           if (partsTooLong) {
             counters.droppedFrame();
           } else {
-            enqueue(parts, 0, partsLength, receiveTimestamp);
+            decode(parts, partsLength);
           }
           partsLength = 0;
           partsTooLong = false;
@@ -222,6 +194,16 @@ public final class BinanceStreamClient implements MarketDataSource, AutoCloseabl
       }
       webSocket.request(1);
       return null;
+    }
+
+    private void decode(DirectBuffer frame, int length) {
+      try {
+        decoder.onFrame(frame, 0, length, receiveTimestamp);
+      } catch (RuntimeException e) {
+        // A frame the decoder could not handle must not close the connection
+        counters.unsupportedMessage();
+        LOG.warn("Could not decode a frame from Binance", e);
+      }
     }
 
     /** Text frames are JSON: subscription responses and {@code serverShutdown} events. */

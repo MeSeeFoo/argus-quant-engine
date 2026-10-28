@@ -6,6 +6,7 @@ import com.argus.feedgateway.adapter.in.binance.BinanceFrames.Trade;
 import com.argus.feedgateway.adapter.in.binance.sbe.BestBidAskStreamEventEncoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderEncoder;
 import com.argus.feedgateway.application.MarketDataCounters;
+import com.argus.feedgateway.application.MarketDataQueue;
 import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.BestBidAsk;
@@ -17,8 +18,9 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.jupiter.api.Test;
 
 /**
- * The decoding path must not allocate per frame. Measured with the JVM's per-thread allocation
- * counter: any allocation per frame would show up as hundreds of kilobytes over the loop.
+ * The whole path of a frame must not allocate: decoding, queueing, draining and relaying. Measured
+ * with the JVM's per-thread allocation counter: any allocation per frame would show up as hundreds
+ * of kilobytes over the loop.
  */
 class BinanceStreamDecoderAllocationTest {
 
@@ -32,11 +34,14 @@ class BinanceStreamDecoderAllocationTest {
   private final Instruments instruments =
       new Instruments(
           List.of(new Instrument("BINANCE", "ETHUSDT"), new Instrument("BINANCE", "BTCUSDT")));
-  private final BinanceStreamDecoder decoder =
-      new BinanceStreamDecoder(
+  private final MarketDataQueue queue =
+      new MarketDataQueue(
           instruments,
           new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
-          counters);
+          relayCounters,
+          64 * 1024);
+  private final BinanceStreamDecoder decoder =
+      new BinanceStreamDecoder(instruments, queue, counters);
   private final BestBidAskStreamEventEncoder bookUpdateIds = new BestBidAskStreamEventEncoder();
   private long bookUpdateId;
   private Frame trades = new Frame(0, 0);
@@ -99,6 +104,7 @@ class BinanceStreamDecoderAllocationTest {
 
   private void decode(Frame frame, long receiveTimestamp) {
     decoder.onFrame(buffer, frame.offset(), frame.length(), receiveTimestamp);
+    queue.drain(Integer.MAX_VALUE);
   }
 
   private record Frame(int offset, int length) {}
