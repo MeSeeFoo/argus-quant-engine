@@ -60,7 +60,7 @@ jobs:
             if [ -n "$failed" ]; then
               echo "Failing test classes:"
               echo
-              printf -- '- `%s`\n' $failed
+              while read -r class; do echo "- \`$class\`"; done <<< "$failed"
               echo
             fi
             echo '```'
