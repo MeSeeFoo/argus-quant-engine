@@ -42,6 +42,25 @@ class InstrumentsTest {
   }
 
   @Test
+  void findsAnInstrument() {
+    assertThat(instruments.indexOf(ETHUSDT)).isEqualTo(1);
+    assertThat(instruments.indexOf(new Instrument("BINANCE", "BTCUSDT"))).isZero();
+    assertThat(instruments.indexOf(new Instrument("KRAKEN", "BTCUSDT")))
+        .isEqualTo(Instruments.UNKNOWN);
+  }
+
+  @Test
+  void parsesTheVenueSymbolKey() {
+    assertThat(Instrument.parse("BINANCE:BTCUSDT")).isEqualTo(BTCUSDT);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"BTCUSDT", "BINANCE:BTC:USDT", ":BTCUSDT", "BINANCE:"})
+  void rejectsMalformedKeys(String key) {
+    assertThatIllegalArgumentException().isThrownBy(() -> Instrument.parse(key));
+  }
+
+  @Test
   void requiresAtLeastOneInstrument() {
     assertThatIllegalArgumentException().isThrownBy(() -> new Instruments(List.of()));
   }

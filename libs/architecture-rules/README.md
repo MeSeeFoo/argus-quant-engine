@@ -4,13 +4,17 @@ ArchUnit rules for the [hexagonal architecture](../../README.md#-hexagonal-archi
 
 ## Rules
 
-Layers are recognised by package name anywhere below the service root (`com.argus.<service>`): `domain`, `application`, `adapter.in`, `adapter.out` and `config`.
+Layers are recognised by package name anywhere below the service root (`com.argus.<service>`): `domain`, `application` (with `application.port.in` and `application.port.out`), `adapter.in`, `adapter.out` and `config`. The layout and its reasons are in [ADR 0009](../../docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md).
 
 | Rule | What it checks |
 | :--- | :--- |
 | `LAYERS_MUST_RESPECT_THE_HEXAGON` | ArchUnit's built-in [`onionArchitecture()`](https://www.archunit.org/userguide/html/000_Index.html#_onion_architecture), which is the hexagonal architecture under another name. `domain` depends on no other layer, and `application` only on `domain`. `adapter.in` and `adapter.out` never depend on each other. Outside the layers, only `config` may use them. |
 | `DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS` | `domain` does not use Spring, Kafka or Aeron. The onion rule only checks dependencies between layers, not on libraries. |
 | `INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG` | `domain` and `application` do not use `config`. The onion rule misses this because `config` belongs to no layer, and `config` is Spring wiring. |
+| `PORTS_MUST_LIVE_IN_PORT_PACKAGES` | Every interface in `application` is a port, in `application.port.in` (where data enters the service) or `application.port.out` (where data leaves it). |
+| `ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS` | `adapter.in` and `adapter.out` use nothing from `application` but its ports, plus the `domain` types the ports carry. The onion rule would let them use any application class. |
+| `INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS` | `adapter.in` does not use `application.port.out`: data comes in through input ports only. |
+| `OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS` | `adapter.out` does not use `application.port.in`: data goes out through output ports only. |
 | `PACKAGES_MUST_BE_FREE_OF_CYCLES` | Every package under `com.argus` is a slice, and slices must be acyclic. |
 
 Only what ArchUnit does not already provide is written by hand.

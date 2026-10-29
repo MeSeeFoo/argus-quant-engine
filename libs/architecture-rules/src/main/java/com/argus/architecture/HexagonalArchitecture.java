@@ -1,7 +1,10 @@
 package com.argus.architecture;
 
 import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.onionArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
@@ -23,14 +26,17 @@ import java.util.List;
  * }</pre>
  *
  * <p>Layers are recognised by package name anywhere below the service root: {@code domain}, {@code
- * application}, {@code adapter.in} and {@code adapter.out}. {@code config} belongs to no layer and
- * is the only code outside them allowed to use them, so that it can wire everything together. A
- * layer that a service does not have yet is not an error.
+ * application} (with its ports in {@code application.port.in} and {@code application.port.out}),
+ * {@code adapter.in} and {@code adapter.out}. See ADR 0009 for the layout. {@code config} belongs
+ * to no layer and is the only code outside them allowed to use them, so that it can wire everything
+ * together. A layer that a service does not have yet is not an error.
  */
 public final class HexagonalArchitecture {
 
   static final String DOMAIN = "..domain..";
   static final String APPLICATION = "..application..";
+  static final String PORT_IN = "..application.port.in..";
+  static final String PORT_OUT = "..application.port.out..";
   static final String ADAPTER_IN = "..adapter.in..";
   static final String ADAPTER_OUT = "..adapter.out..";
   static final String CONFIG = "..config..";
@@ -80,6 +86,66 @@ public final class HexagonalArchitecture {
           .because("config is Spring wiring, and it would bring the framework into the hexagon")
           .allowEmptyShould(true);
 
+  /** Ports have a fixed home, so that the boundary of a service is visible in its packages. */
+  @ArchTest
+  public static final ArchRule PORTS_MUST_LIVE_IN_PORT_PACKAGES =
+      classes()
+          .that()
+          .areInterfaces()
+          // An annotation is an interface to the JVM, but never a port
+          .and()
+          .areNotAnnotations()
+          .and()
+          .resideInAPackage(APPLICATION)
+          // package-info compiles to a synthetic interface
+          .and()
+          .doNotHaveSimpleName("package-info")
+          .should()
+          .resideInAnyPackage(PORT_IN, PORT_OUT)
+          .as("interfaces in application must be ports, in application.port.in or port.out")
+          .because(
+              "a port's package says which way data flows: port.in into the service, port.out out")
+          .allowEmptyShould(true);
+
+  /** The onion rule lets adapters use any application class; only ports are meant for them. */
+  @ArchTest
+  public static final ArchRule ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS =
+      noClasses()
+          .that()
+          .resideInAnyPackage(ADAPTER_IN, ADAPTER_OUT)
+          .should()
+          .dependOnClassesThat(
+              resideInAPackage(APPLICATION).and(not(resideInAnyPackage(PORT_IN, PORT_OUT))))
+          .as("adapters must use the application only through its ports")
+          .because("a service behind a port can change without touching the adapters")
+          .allowEmptyShould(true);
+
+  /** A port's direction follows the data (ADR 0009): data comes in through input ports only. */
+  @ArchTest
+  public static final ArchRule INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS =
+      noClasses()
+          .that()
+          .resideInAPackage(ADAPTER_IN)
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage(PORT_OUT)
+          .as("inbound adapters must not use output ports")
+          .because("an inbound adapter brings data in, and output ports are where data leaves")
+          .allowEmptyShould(true);
+
+  /** A port's direction follows the data (ADR 0009): data goes out through output ports only. */
+  @ArchTest
+  public static final ArchRule OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS =
+      noClasses()
+          .that()
+          .resideInAPackage(ADAPTER_OUT)
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage(PORT_IN)
+          .as("outbound adapters must not use input ports")
+          .because("an outbound adapter takes data out, and input ports are where data enters")
+          .allowEmptyShould(true);
+
   @ArchTest
   public static final ArchRule PACKAGES_MUST_BE_FREE_OF_CYCLES =
       slices()
@@ -95,6 +161,10 @@ public final class HexagonalArchitecture {
         LAYERS_MUST_RESPECT_THE_HEXAGON,
         DOMAIN_MUST_NOT_DEPEND_ON_FRAMEWORKS,
         INNER_LAYERS_MUST_NOT_DEPEND_ON_CONFIG,
+        PORTS_MUST_LIVE_IN_PORT_PACKAGES,
+        ADAPTERS_MUST_USE_THE_APPLICATION_THROUGH_PORTS,
+        INBOUND_ADAPTERS_USE_ONLY_INPUT_PORTS,
+        OUTBOUND_ADAPTERS_USE_ONLY_OUTPUT_PORTS,
         PACKAGES_MUST_BE_FREE_OF_CYCLES);
   }
 

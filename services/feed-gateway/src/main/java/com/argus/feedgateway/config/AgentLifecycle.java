@@ -11,6 +11,12 @@ import org.springframework.context.SmartLifecycle;
 /**
  * Runs one Agrona agent on its own thread, named after the agent's role, while the Spring context
  * is running. The agent stays plain Java: Spring starts and stops it, nothing more.
+ *
+ * <p>The methods are synchronized because Spring may call them from different threads: {@code
+ * start} from the main thread, {@code stop} from the shutdown hook. The lock makes {@code runner}
+ * visible across them and keeps two calls from starting or closing it twice. It is taken only at
+ * startup and shutdown, never by the agent's thread. {@code stop} holds it while the agent closes,
+ * so the agent must never call back into this class.
  */
 final class AgentLifecycle implements SmartLifecycle {
 

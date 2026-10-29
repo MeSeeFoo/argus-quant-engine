@@ -1,7 +1,6 @@
-package com.argus.feedgateway.config;
+package com.argus.feedgateway.adapter.out.aeron;
 
-import com.argus.feedgateway.adapter.out.aeron.AeronMarketDataPublisher;
-import com.argus.feedgateway.adapter.out.aeron.PublicationCounters;
+import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import io.aeron.Aeron;
 import io.aeron.ExclusivePublication;
 import io.aeron.driver.MediaDriver;
@@ -16,8 +15,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * The fast path: an embedded Media Driver, the Aeron client and the shard's publication (ADR 0021).
- * Beans are closed in reverse order on shutdown: publication, client, driver.
+ * The Aeron adapter: an embedded Media Driver, the Aeron client, the shard's publication (ADR 0021)
+ * and the {@link MarketDataPublisher} on top of it, with its metrics. It owns its properties
+ * ({@code argus.feed-gateway.aeron.*}); the rest of the gateway only sees the port. Beans are
+ * closed in reverse order on shutdown: publication, client, driver.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AeronProperties.class)
@@ -52,14 +53,11 @@ class AeronConfiguration {
     return new PublicationCounters();
   }
 
-  /** Plain Java: Spring only creates it. The publishing agent calls it directly (ADR 0010). */
+  /** Plain Java: Spring only creates it. The gateway agent calls it directly (ADR 0010). */
   @Bean
-  AeronMarketDataPublisher marketDataPublisher(
-      ExclusivePublication marketDataPublication,
-      PublicationCounters publicationCounters,
-      AeronProperties properties) {
-    return new AeronMarketDataPublisher(
-        marketDataPublication, publicationCounters, properties.heartbeatInterval().toNanos());
+  MarketDataPublisher marketDataPublisher(
+      ExclusivePublication marketDataPublication, PublicationCounters publicationCounters) {
+    return new AeronMarketDataPublisher(marketDataPublication, publicationCounters);
   }
 
   @Bean

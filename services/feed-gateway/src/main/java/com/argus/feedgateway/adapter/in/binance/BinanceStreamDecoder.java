@@ -6,19 +6,21 @@ import com.argus.feedgateway.adapter.in.binance.sbe.GroupSizeEncodingDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.TradesStreamEventDecoder.TradesDecoder;
-import com.argus.feedgateway.application.MarketDataCounters;
-import com.argus.feedgateway.application.MarketDataNormaliser;
+import com.argus.feedgateway.application.port.in.IngestMarketData;
 import com.argus.feedgateway.domain.AggressorSide;
+import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
 import com.argus.feedgateway.domain.Instruments;
+import com.argus.feedgateway.domain.Trade;
 import org.agrona.DirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 /**
  * Decodes the binary frames of Binance's SBE market data stream ({@code <symbol>@trade} and {@code
- * <symbol>@bestBidAsk}) with flyweights, and passes them to the {@link MarketDataNormaliser}. Other
- * messages, other schemas and malformed frames are counted and ignored. One instance per
- * connection; not thread-safe, and allocation-free per frame.
+ * <symbol>@bestBidAsk}) with flyweights, fills one reused {@link Trade} or {@link BestBidAsk} per
+ * event and hands it to the {@link IngestMarketData} input port. Other messages, other schemas and
+ * malformed frames are counted and ignored. Runs on the connection's thread: one instance per
+ * connection, not thread-safe, and allocation-free per frame.
  */
 public final class BinanceStreamDecoder {
 
@@ -33,13 +35,15 @@ public final class BinanceStreamDecoder {
   private final byte[] symbol = new byte[Instrument.MAX_SYMBOL_LENGTH + 1];
 
   private final Instruments instruments;
-  private final MarketDataNormaliser normaliser;
-  private final MarketDataCounters counters;
+  private final IngestMarketData ingest;
+  private final BinanceCounters counters;
+  private final Trade trade = new Trade();
+  private final BestBidAsk book = new BestBidAsk();
 
   public BinanceStreamDecoder(
-      Instruments instruments, MarketDataNormaliser normaliser, MarketDataCounters counters) {
+      Instruments instruments, IngestMarketData ingest, BinanceCounters counters) {
     this.instruments = instruments;
-    this.normaliser = normaliser;
+    this.ingest = ingest;
     this.counters = counters;
   }
 
@@ -112,17 +116,19 @@ public final class BinanceStreamDecoder {
     group = trades.trades();
     while (group.hasNext()) {
       group.next();
-      normaliser.onTrade(
-          instrument,
-          group.id(),
-          group.price(),
-          priceExponent,
-          group.qty(),
-          quantityExponent,
+      trade
+          .instrument(instruments.get(instrument))
+          .tradeId(group.id())
+          .price(group.price(), priceExponent)
+          .quantity(group.qty(), quantityExponent)
           // The maker's order was resting in the book; the other side crossed the spread.
-          group.isBuyerMakerRaw() == BoolEnum.True.value() ? AggressorSide.SELL : AggressorSide.BUY,
-          exchangeTimestamp,
-          receiveTimestamp);
+          .aggressorSide(
+              group.isBuyerMakerRaw() == BoolEnum.True.value()
+                  ? AggressorSide.SELL
+                  : AggressorSide.BUY)
+          .exchangeTimestamp(exchangeTimestamp)
+          .receiveTimestamp(receiveTimestamp);
+      ingest.onTrade(trade);
     }
   }
 
@@ -153,17 +159,13 @@ public final class BinanceStreamDecoder {
     if (instrument == Instruments.UNKNOWN) {
       return;
     }
-    normaliser.onBestBidAsk(
-        instrument,
-        bookUpdateId,
-        bidPrice,
-        bidQuantity,
-        askPrice,
-        askQuantity,
-        priceExponent,
-        quantityExponent,
-        eventTime * NANOS_PER_MICRO,
-        receiveTimestamp);
+    book.instrument(instruments.get(instrument))
+        .bookUpdateId(bookUpdateId)
+        .bid(bidPrice, priceExponent, bidQuantity, quantityExponent)
+        .ask(askPrice, priceExponent, askQuantity, quantityExponent)
+        .exchangeTimestamp(eventTime * NANOS_PER_MICRO)
+        .receiveTimestamp(receiveTimestamp);
+    ingest.onBestBidAsk(book);
   }
 
   private int instrumentOf(int symbolLength) {

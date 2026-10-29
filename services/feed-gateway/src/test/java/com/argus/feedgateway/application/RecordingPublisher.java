@@ -1,11 +1,16 @@
 package com.argus.feedgateway.application;
 
+import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.AggressorSide;
+import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Keeps everything published, for assertions. Allocates: not for allocation tests. */
+/**
+ * Keeps a copy of everything published, for assertions: the objects it is passed are reused by the
+ * caller. Allocates, so it is not for allocation tests.
+ */
 public final class RecordingPublisher implements MarketDataPublisher {
 
   public record Trade(
@@ -29,46 +34,37 @@ public final class RecordingPublisher implements MarketDataPublisher {
 
   public final List<Trade> trades = new ArrayList<>();
   public final List<BestBidAsk> bestBidAsks = new ArrayList<>();
+  public final List<Long> heartbeats = new ArrayList<>();
 
   @Override
-  public void publishTrade(
-      Instrument instrument,
-      long tradeId,
-      long price,
-      long quantity,
-      long exchangeTimestamp,
-      long receiveTimestamp,
-      AggressorSide aggressorSide) {
+  public void publishTrade(com.argus.feedgateway.domain.Trade trade) {
     trades.add(
         new Trade(
-            instrument,
-            tradeId,
-            price,
-            quantity,
-            exchangeTimestamp,
-            receiveTimestamp,
-            aggressorSide));
+            trade.instrument(),
+            trade.tradeId(),
+            trade.price(),
+            trade.quantity(),
+            trade.exchangeTimestamp(),
+            trade.receiveTimestamp(),
+            trade.aggressorSide()));
   }
 
   @Override
-  public void publishBestBidAsk(
-      Instrument instrument,
-      long bookUpdateId,
-      long bidPrice,
-      long bidQuantity,
-      long askPrice,
-      long askQuantity,
-      long exchangeTimestamp,
-      long receiveTimestamp) {
+  public void publishBestBidAsk(com.argus.feedgateway.domain.BestBidAsk book) {
     bestBidAsks.add(
         new BestBidAsk(
-            instrument,
-            bookUpdateId,
-            bidPrice,
-            bidQuantity,
-            askPrice,
-            askQuantity,
-            exchangeTimestamp,
-            receiveTimestamp));
+            book.instrument(),
+            book.bookUpdateId(),
+            book.bidPrice(),
+            book.bidQuantity(),
+            book.askPrice(),
+            book.askQuantity(),
+            book.exchangeTimestamp(),
+            book.receiveTimestamp()));
+  }
+
+  @Override
+  public void publishHeartbeat(long epochNow) {
+    heartbeats.add(epochNow);
   }
 }

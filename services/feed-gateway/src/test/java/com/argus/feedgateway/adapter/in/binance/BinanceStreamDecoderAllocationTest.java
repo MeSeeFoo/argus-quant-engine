@@ -6,9 +6,10 @@ import com.argus.feedgateway.adapter.in.binance.BinanceFrames.Trade;
 import com.argus.feedgateway.adapter.in.binance.sbe.BestBidAskStreamEventEncoder;
 import com.argus.feedgateway.adapter.in.binance.sbe.MessageHeaderEncoder;
 import com.argus.feedgateway.application.MarketDataCounters;
-import com.argus.feedgateway.application.MarketDataNormaliser;
-import com.argus.feedgateway.application.MarketDataPublisher;
-import com.argus.feedgateway.domain.AggressorSide;
+import com.argus.feedgateway.application.MarketDataQueue;
+import com.argus.feedgateway.application.MarketDataRelay;
+import com.argus.feedgateway.application.port.out.MarketDataPublisher;
+import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
 import com.argus.feedgateway.domain.Instruments;
 import java.lang.management.ManagementFactory;
@@ -17,8 +18,9 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.jupiter.api.Test;
 
 /**
- * The decoding path must not allocate per frame. Measured with the JVM's per-thread allocation
- * counter: any allocation per frame would show up as hundreds of kilobytes over the loop.
+ * The whole path of a frame must not allocate: decoding, queueing, draining and relaying. Measured
+ * with the JVM's per-thread allocation counter: any allocation per frame would show up as hundreds
+ * of kilobytes over the loop.
  */
 class BinanceStreamDecoderAllocationTest {
 
@@ -27,13 +29,19 @@ class BinanceStreamDecoderAllocationTest {
 
   private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1024]);
   private final CountingPublisher publisher = new CountingPublisher();
-  private final MarketDataCounters counters = new MarketDataCounters();
+  private final BinanceCounters counters = new BinanceCounters();
+  private final MarketDataCounters relayCounters = new MarketDataCounters();
   private final Instruments instruments =
       new Instruments(
           List.of(new Instrument("BINANCE", "ETHUSDT"), new Instrument("BINANCE", "BTCUSDT")));
+  private final MarketDataQueue queue =
+      new MarketDataQueue(
+          instruments,
+          new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+          relayCounters,
+          64 * 1024);
   private final BinanceStreamDecoder decoder =
-      new BinanceStreamDecoder(
-          instruments, new MarketDataNormaliser(instruments, publisher, counters), counters);
+      new BinanceStreamDecoder(instruments, queue, counters);
   private final BestBidAskStreamEventEncoder bookUpdateIds = new BestBidAskStreamEventEncoder();
   private long bookUpdateId;
   private Frame trades = new Frame(0, 0);
@@ -75,9 +83,9 @@ class BinanceStreamDecoderAllocationTest {
 
     assertThat(publisher.trades).isEqualTo(4L * FRAMES);
     assertThat(publisher.bestBidAsks).isEqualTo(2L * FRAMES);
-    assertThat(counters.staleBookUpdates()).isEqualTo(2L * FRAMES);
+    assertThat(relayCounters.staleBookUpdates()).isEqualTo(2L * FRAMES);
     assertThat(counters.unknownSymbols()).isEqualTo(2L * FRAMES);
-    assertThat(counters.unrepresentableValues()).isEqualTo(2L * FRAMES);
+    assertThat(relayCounters.unrepresentableValues()).isEqualTo(2L * FRAMES);
     assertThat(allocated).isLessThan(TOLERATED_BYTES);
   }
 
@@ -96,6 +104,7 @@ class BinanceStreamDecoderAllocationTest {
 
   private void decode(Frame frame, long receiveTimestamp) {
     decoder.onFrame(buffer, frame.offset(), frame.length(), receiveTimestamp);
+    queue.drain(Integer.MAX_VALUE);
   }
 
   private record Frame(int offset, int length) {}
@@ -106,28 +115,16 @@ class BinanceStreamDecoderAllocationTest {
     long bestBidAsks;
 
     @Override
-    public void publishTrade(
-        Instrument instrument,
-        long tradeId,
-        long price,
-        long quantity,
-        long exchangeTimestamp,
-        long receiveTimestamp,
-        AggressorSide aggressorSide) {
+    public void publishTrade(com.argus.feedgateway.domain.Trade trade) {
       trades++;
     }
 
     @Override
-    public void publishBestBidAsk(
-        Instrument instrument,
-        long bookUpdateId,
-        long bidPrice,
-        long bidQuantity,
-        long askPrice,
-        long askQuantity,
-        long exchangeTimestamp,
-        long receiveTimestamp) {
+    public void publishBestBidAsk(BestBidAsk bestBidAsk) {
       bestBidAsks++;
     }
+
+    @Override
+    public void publishHeartbeat(long epochNow) {}
   }
 }

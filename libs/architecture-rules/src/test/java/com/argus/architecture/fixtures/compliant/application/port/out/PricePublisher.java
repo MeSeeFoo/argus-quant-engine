@@ -1,4 +1,4 @@
-package com.argus.architecture.fixtures.compliant.application;
+package com.argus.architecture.fixtures.compliant.application.port.out;
 
 import com.argus.architecture.fixtures.compliant.domain.Price;
 
