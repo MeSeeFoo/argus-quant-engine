@@ -179,14 +179,14 @@ Every message mirrors its SBE counterpart field by field, and **its field number
 
 | Topic | Message | Meaning | Route |
 | :--- | :--- | :--- | :--- |
-| `argus.market.trades.v1` | `Trade` | Same as the SBE `Trade`: an execution on the venue, never corrected. | model-engine → data-archiver, bff |
-| `argus.market.quotes.v1` | `BestBidAsk` | Same as the SBE `BestBidAsk`: the top of book, intent rather than execution; each update replaces the previous one. | model-engine → data-archiver, bff |
+| `argus.market.trades.v1` | `Trade` | Same as the SBE `Trade`: an execution on the venue, never corrected. | feed-gateway, feed-player in simulated live → data-archiver, bff |
+| `argus.market.quotes.v1` | `BestBidAsk` | Same as the SBE `BestBidAsk`: the top of book, intent rather than execution; each update replaces the previous one. **Conflated**: the latest per instrument, at most once per interval and only if it changed ([ADR 0027](../docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)). | feed-gateway, feed-player in simulated live → data-archiver, bff |
 | `argus.indicators.v1` | `IndicatorValue` | Same as the SBE `IndicatorValue`, **conflated**: the latest value per deployment and instrument, at most once per interval and only if it changed ([ADR 0018](../docs/adr/0018-output-policy-of-the-durable-path.md)). | model-engine → data-archiver, bff |
 | `argus.alerts.v1` | `Alert` | Same as the SBE `Alert`: every alert. | model-engine → notification-dispatcher, data-archiver, bff |
 
 `Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
 
-The market topics carry **every tick, never aggregated**: there is no candle topic. Candles are computed on request from the stored ticks, at whatever resolution is needed, so the full stream stays available for archiving and for a future export to a data lake. The publisher may drop ticks under backpressure rather than block the fast path; a drop shows up as a gap in `sequence`. See [Market data on Kafka](../README.md#market-data-on-kafka).
+`argus.market.trades.v1` carries **every trade, never aggregated**, and `argus.market.quotes.v1` the conflated top of book: there is no candle topic. Candles are computed on request from the stored trades, at whatever resolution is needed, so every trade stays available for archiving and for a future export to a data lake. The feed gateway publishes them, not the model engine ([ADR 0027](../docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)). It may drop ticks under backpressure rather than block the fast path; a drop shows up as a gap in `sequence`. See [Market data on Kafka](../README.md#market-data-on-kafka).
 
 **`Trade`**
 

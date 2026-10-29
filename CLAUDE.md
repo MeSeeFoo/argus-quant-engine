@@ -50,7 +50,7 @@ There is no "signal", "signal engine" or "rule runtime" any more: [ADR 0014](doc
 
 ## Rules that must never be broken
 
-1. **The engine never blocks on Kafka.** The fast path writes to an Agrona ring buffer drained by a separate publisher agent; when the buffer is full, messages are dropped and counted ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md)).
+1. **The fast path never blocks on Kafka.** In the feed gateway and the model engine, the fast path writes to an Agrona ring buffer drained by a separate publisher agent; when the buffer is full, messages are dropped and counted ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md), [ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)).
 2. **No allocation on the hot path** in steady state: pre-allocated primitive ring buffers, SBE flyweights, no boxing, no locks ([Hot path](README.md#hot-path)). Spring only wires and starts the agents: no beans or proxies on the hot path ([ADR 0010](docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
 3. **No Spring, Kafka or Aeron in `domain`.** The hexagonal rules are ArchUnit tests, not conventions ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 4. **Event time everywhere.** Windows and a model's "now" use the events' `exchangeTimestamp`, never the system clock; wall-clock time only measures latency ([ADR 0017](docs/adr/0017-multi-instrument-models-and-event-time.md)).

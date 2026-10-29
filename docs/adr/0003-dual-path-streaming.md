@@ -1,6 +1,6 @@
 # 0003. Dual-path streaming: Aeron + SBE and Kafka + Protobuf
 
-- **Status:** Accepted, amended by [0021](0021-run-everything-on-fargate-with-aeron-over-udp.md)
+- **Status:** Accepted, amended by [0021](0021-run-everything-on-fargate-with-aeron-over-udp.md) and [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md)
 - **Date:** 2026-10-14
 - **Issues:** #3, #4, #5, #11
 

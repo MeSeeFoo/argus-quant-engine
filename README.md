@@ -46,7 +46,9 @@ The whole platform runs locally with Docker Compose and is deployed **end-to-end
 | **Fast path** | Aeron over UDP unicast | SBE (Simple Binary Encoding) | Market data into the engine, every model output to low-latency consumers |
 | **Durable path** | Apache Kafka | Protobuf + Schema Registry | Archiving, notifications, state distribution, UI streaming |
 
-The engine never blocks on Kafka. Results are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path. The trade-off is accepted on purpose: if the ring buffer fills up, messages are dropped rather than slowing the engine down ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md)).
+The feed gateway publishes market data on both paths, and the model engine publishes its outputs on both paths ([ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)).
+
+Neither blocks on Kafka. Messages are written to an in-memory Agrona ring buffer, and a dedicated publisher thread drains it into Kafka. Slow brokers or consumers therefore cannot affect the fast path. The trade-off is accepted on purpose: if the ring buffer fills up, messages are dropped rather than slowing the fast path down ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md)).
 
 Every service runs on Fargate, so Aeron uses UDP everywhere, with an embedded Media Driver in each JVM; IPC is only a configuration option ([ADR 0021](docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)).
 
@@ -54,10 +56,12 @@ Every service runs on Fargate, so Aeron uses UDP everywhere, with an embedded Me
 
 ```mermaid
 flowchart LR
+    K@{ shape: das, label: "Apache Kafka" }
     BIN["Binance WebSocket API"] -->|"raw JSON"| FG["argus-feed-gateway<br/>(shards, active + passive)"]
     FILES[("Recorded sessions")] --> FP["argus-feed-player<br/>(replay, backtesting)"]
     FG -->|"Aeron UDP · SBE"| ME
     FP -->|"Aeron UDP · SBE"| ME
+    FG -->|"async publisher<br/>(ticks)"| K
 
     subgraph ME["argus-model-engine (1..n instances)"]
         direction TB
@@ -67,7 +71,7 @@ flowchart LR
     end
 
     ME -->|"Aeron UDP · SBE"| STR["argus-strategy-sim<br/>(paper trading)"]
-    ME -->|"async publisher"| K[("Apache Kafka")]
+    ME -->|"async publisher<br/>(outputs)"| K
 
     K --> ND["argus-notification-dispatcher"]
     ND --> EXT["Webhooks / Email"]
@@ -92,14 +96,14 @@ Model state (models, deployments, the instrument catalogue, the PANIC state) is 
 
 | Component | Type | Tech | Responsibility |
 | :--- | :--- | :--- | :--- |
-| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades and top-of-book updates into SBE messages and publishes them over Aeron. Instruments are split into **shards**; each shard runs an active and a passive task, elected through Kafka, and the passive takes over from the last trade the active published ([ADR 0022](docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)). Publishes the status of its connections. |
+| **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades and top-of-book updates into SBE messages and publishes them over Aeron, and to Kafka without blocking the fast path ([ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)). Instruments are split into **shards**; each shard runs an active and a passive task, elected through Kafka, and the passive takes over from the last trade the active published ([ADR 0022](docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)). Publishes the status of its connections. |
 | **`argus-feed-player`** | Service | Spring Boot, Aeron, Parquet | Replays recorded sessions with the same messages as the gateway: **backtests** (original timestamps, any speed, isolated) and **simulated live** data for instruments Binance does not list ([ADR 0024](docs/adr/0024-a-feed-player-for-replay-and-backtesting.md)). |
 | **`argus-model-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Runs **deployments** of user models (`Indicator` and `AlertRule`): keeps their windows in memory, evaluates them on every input update, and emits `IndicatorValue` and `Alert` messages over Aeron and to Kafka. Instances share the deployments through a Kafka consumer group ([ADR 0014](docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md), [0016](docs/adr/0016-distribute-deployments-with-a-kafka-consumer-group.md)). |
 | **`argus-model-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python models inside the model engine: the `argus` SDK (`ModelConfiguration`, indicator views, `argus.math`), isolation and resource limits ([ADR 0011](docs/adr/0011-user-models-in-python-on-graalpy.md)). |
 | **`argus-builtin-models`** | Library | Java | Standard indicators (SMA, EMA, VWAP, mid price, RSI, Bollinger…), zero-allocation, behind the same contract as Python models ([ADR 0015](docs/adr/0015-built-in-models-in-java-behind-the-same-contract.md)). |
 | **`argus-strategy-sim`** | Service | Spring Boot, Aeron | Reference fast-path consumer. Subscribes to model outputs, simulates order fills and tracks a paper portfolio. It also records the output-to-reaction latency. |
 | **`argus-notification-dispatcher`** | Service | Spring Boot, Resilience4j | Turns alerts into notifications (webhooks, email): routing, deduplication, cooldown, retries, a circuit breaker per destination and a dead-letter topic. It **only notifies**; it never acts on Argus ([ADR 0020](docs/adr/0020-the-notification-dispatcher-only-notifies.md)). |
-| **`argus-data-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists every trade and top-of-book update, plus indicator values, alerts, notification deliveries and the audit log, into QuestDB time-partitioned tables, in batches. |
+| **`argus-data-archiver`** | Service | Spring Boot, Spring Kafka, QuestDB Java client (ILP) | Persists every trade and the conflated top of book, plus indicator values, alerts, notification deliveries and the audit log, into QuestDB time-partitioned tables, in batches. |
 | **`argus-bff`** | Service | Spring Boot, Spring Security (OAuth2), WebSocket | Backend-for-Frontend. Management of models, deployments and the instrument catalogue (validation, versioning, dry runs), the PANIC button, historical queries, and live streaming of Kafka events to the UI. Chart candles are computed on request from the ticks in QuestDB (`SAMPLE BY`). |
 | **`argus-ui`** | Web app | Angular, TypeScript, TradingView Lightweight Charts | Real-time dashboard: live charts, indicators and alerts, a Python model editor, deployments, gateway status and the PANIC button. |
 | **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Sends calibrated parameters to deployments through the BFF. |
@@ -223,7 +227,7 @@ The layout follows Tom Hombergs' *buckpal*. Adapters see the application only th
 | `aeron:udp` stream `1000 + shard` | Aeron | SBE `Trade`, `BestBidAsk`, `Heartbeat` | Normalised market data, one stream per shard |
 | `aeron:udp` model outputs | Aeron | SBE `IndicatorValue`, `Alert`, `Heartbeat` | Every model output, for fast-path consumers and other deployments |
 | `argus.market.trades.v1` | Kafka | Protobuf | Normalised trades |
-| `argus.market.quotes.v1` | Kafka | Protobuf | Top of book (best bid / ask) |
+| `argus.market.quotes.v1` | Kafka | Protobuf | Top of book (best bid / ask), conflated |
 | `argus.indicators.v1` | Kafka | Protobuf | Indicator values, conflated |
 | `argus.alerts.v1` | Kafka | Protobuf | Every alert raised by an `AlertRule` |
 | `argus.alerts.dlq.v1` | Kafka | Protobuf | Alerts whose notification failed after retries |
@@ -241,8 +245,10 @@ All messages, fast path and Kafka, are described in [`contracts/README.md`](cont
 
 ### Market data on Kafka
 
-- **Every tick, never aggregated.** `argus.market.trades.v1` and `argus.market.quotes.v1` carry every trade and every top-of-book update the engine receives. Nothing is pre-aggregated: candles for charts are computed on request by `argus-bff` from the ticks stored in QuestDB, and models keep their own windows in memory. Any resolution can be derived later without reprocessing ([ADR 0006](docs/adr/0006-archive-every-tick-and-compute-candles-on-request.md)).
-- **Losses are possible, and visible.** The engine never blocks on Kafka, so if the publisher's ring buffer is full, ticks are dropped instead of slowing down the fast path. This is an accepted trade-off. Every dropped message is counted in a metric, and the `sequence` field leaves a gap that consumers (and any later analysis) can detect.
+- **Published by the feed gateway.** The model engine does not republish market data ([ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)).
+- **Every trade, conflated top of book.** `argus.market.trades.v1` carries every trade the gateway receives. `argus.market.quotes.v1` is conflated: the latest top of book per instrument, at most once per configurable interval and only if it changed. Nothing is pre-aggregated: candles for charts are computed on request by `argus-bff` from the ticks stored in QuestDB, and models keep their own windows in memory. Any resolution can be derived later without reprocessing ([ADR 0006](docs/adr/0006-archive-every-tick-and-compute-candles-on-request.md)).
+- **Losses are possible, and visible.** The gateway never blocks on Kafka, so if the publisher's ring buffer is full, ticks are dropped for Kafka instead of slowing down the fast path. This is an accepted trade-off. Every dropped message is counted in a metric, and the `sequence` field leaves a gap that consumers (and any later analysis) can detect.
+- **Duplicates are possible after a failover.** When the passive gateway takes over it may repeat a few events; the archiver deduplicates trades by venue, symbol and `tradeId`.
 - **Kafka is not the archive.** Topics have a limited retention (days). QuestDB holds the queryable history.
 
 ---
@@ -428,7 +434,7 @@ Partitions can only grow. If `topics.conf` asks for fewer partitions than a topi
 
 - [x] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules, Architecture Decision Records.
 - [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
-- [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA) → Kafka → data archiver → QuestDB.
+- [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA); gateway and engine → Kafka → data archiver → QuestDB.
 - [ ] **Phase 3: Python models & alerts.** GraalPy proof of concept, `argus-feed-player`, `argus-model-runtime` and the `argus` SDK, `Indicator` and `AlertRule`, multi-instrument models, sandbox limits and circuit breaker, the PANIC button, notification dispatcher with Resilience4j.
 - [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live deployments. Demo model: a US stock valued in euros.
 - [ ] **Phase 5: API & UI.** `argus-bff` (REST, WebSocket, OIDC) and the Angular dashboard.
