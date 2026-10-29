@@ -1,6 +1,6 @@
 # 0006. Archive every tick and compute candles on request
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md)
 - **Date:** 2026-10-14
 - **Issues:** #3, #7, #11
 
