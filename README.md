@@ -58,7 +58,8 @@ Every service runs on Fargate, so Aeron uses UDP everywhere, with an embedded Me
 flowchart LR
     K@{ shape: das, label: "Apache Kafka" }
     BIN["Binance WebSocket API"] -->|"raw JSON"| FG["argus-feed-gateway<br/>(shards, active + passive)"]
-    FILES[("Recorded sessions")] --> FP["argus-feed-player<br/>(replay, backtesting)"]
+    FG -->|"Aeron UDP · SBE<br/>(recording)"| FP["argus-feed-player<br/>(recording, replay, backtesting)"]
+    FP <--> FILES[("Recorded sessions")]
     FG -->|"Aeron UDP · SBE"| ME
     FP -->|"Aeron UDP · SBE"| ME
     FG -->|"async publisher<br/>(ticks)"| K
@@ -97,7 +98,7 @@ Model state (models, deployments, the instrument catalogue, the PANIC state) is 
 | Component | Type | Tech | Responsibility |
 | :--- | :--- | :--- | :--- |
 | **`argus-feed-gateway`** | Service | Spring Boot, Java WebSocket client, Aeron | Connects to Binance public streams, normalises trades and top-of-book updates into SBE messages and publishes them over Aeron, and to Kafka without blocking the fast path ([ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)). Instruments are split into **shards**; each shard runs an active and a passive task, elected through Kafka, and the passive takes over from the last trade the active published ([ADR 0022](docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)). Publishes the status of its connections. |
-| **`argus-feed-player`** | Service | Spring Boot, Aeron, Parquet | Replays recorded sessions with the same messages as the gateway: **backtests** (original timestamps, any speed, isolated) and **simulated live** data for instruments Binance does not list ([ADR 0024](docs/adr/0024-a-feed-player-for-replay-and-backtesting.md)). |
+| **`argus-feed-player`** | Service | Spring Boot, Aeron, Agrona | Records sessions by subscribing to the gateway over Aeron, into a binary log of SBE messages, and replays them with the same messages as the gateway: **backtests** (original timestamps, any speed, isolated) and **simulated live** data for instruments Binance does not list. Converts Binance's historical data and QuestDB exports to the same log ([ADR 0024](docs/adr/0024-a-feed-player-for-replay-and-backtesting.md), [0028](docs/adr/0028-the-feed-player-records-sessions-from-the-gateway.md)). |
 | **`argus-model-engine`** | Service | Spring Boot (bootstrap only), Aeron, Agrona, GraalVM Polyglot | Core of the system. Runs **deployments** of user models (`Indicator` and `AlertRule`): keeps their windows in memory, evaluates them on every input update, and emits `IndicatorValue` and `Alert` messages over Aeron and to Kafka. Instances share the deployments through a Kafka consumer group ([ADR 0014](docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md), [0016](docs/adr/0016-distribute-deployments-with-a-kafka-consumer-group.md)). |
 | **`argus-model-runtime`** | Library | GraalVM Polyglot (GraalPy), `argus` Python SDK | Sandboxed execution of Python models inside the model engine: the `argus` SDK (`ModelConfiguration`, indicator views, `argus.math`), isolation and resource limits ([ADR 0011](docs/adr/0011-user-models-in-python-on-graalpy.md)). |
 | **`argus-builtin-models`** | Library | Java | Standard indicators (SMA, EMA, VWAP, mid price, RSI, Bollinger…), zero-allocation, behind the same contract as Python models ([ADR 0015](docs/adr/0015-built-in-models-in-java-behind-the-same-contract.md)). |
@@ -434,8 +435,8 @@ Partitions can only grow. If `topics.conf` asks for fewer partitions than a topi
 
 - [x] **Phase 0: Foundations.** Maven multi-module build, `argus-contracts`, Docker Compose (Kafka, QuestDB, PostgreSQL, Apicurio, Grafana), GitHub Actions CI, ArchUnit rules, Architecture Decision Records.
 - [ ] **Phase 1: AI-assisted development workflow.** `CLAUDE.md`, specialised Claude Code subagents (backend, frontend, QA automation, DevOps, reviewer), skills and hooks.
-- [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA); gateway and engine → Kafka → data archiver → QuestDB.
-- [ ] **Phase 3: Python models & alerts.** GraalPy proof of concept, `argus-feed-player`, `argus-model-runtime` and the `argus` SDK, `Indicator` and `AlertRule`, multi-instrument models, sandbox limits and circuit breaker, the PANIC button, notification dispatcher with Resilience4j.
+- [ ] **Phase 2: Vertical slice.** Feed gateway (one shard) → model engine (one instance, windows + built-in SMA/EMA); gateway and engine → Kafka → data archiver → QuestDB; `argus-feed-player` records sessions from the gateway and replays them.
+- [ ] **Phase 3: Python models & alerts.** GraalPy proof of concept, `argus-model-runtime` and the `argus` SDK, `Indicator` and `AlertRule`, multi-instrument models, sandbox limits and circuit breaker, the PANIC button, notification dispatcher with Resilience4j.
 - [ ] **Phase 4: Quant lab.** `argus-quant-lab` with Jupyter, pandas and NumPy on QuestDB data: analysis, backtesting and calibrated parameters for live deployments. Demo model: a US stock valued in euros.
 - [ ] **Phase 5: API & UI.** `argus-bff` (REST, WebSocket, OIDC) and the Angular dashboard.
 - [ ] **Phase 6: Fast-path consumer & benchmarking.** `argus-strategy-sim`, JMH and HdrHistogram harnesses, real latency numbers in this README.

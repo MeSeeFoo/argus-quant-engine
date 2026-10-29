@@ -43,17 +43,17 @@ Agents can be refined or added as later phases arrive. The frontend agent, for i
 **Goal:** a real piece of data flows through the whole system, even with minimal logic.
 
 - **`argus-feed-gateway`:** connects to Binance and publishes trades and top-of-book updates over Aeron UDP, and to Kafka without blocking the fast path: every trade, and the top of book conflated at a configurable interval. Counts the ones it has to drop ([ADR 0027](adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)). A single shard and a single task; the instrument catalogue starts with one shard.
+- **`argus-feed-player`:** records sessions by subscribing to the gateway over Aeron, and replays them with the same messages: backtests, simulated live data for instruments Binance does not list, and a deterministic input for tests, so CI does not depend on Binance. Converters from Binance's historical data and from QuestDB exports ([ADR 0024](adr/0024-a-feed-player-for-replay-and-backtesting.md), [0028](adr/0028-the-feed-player-records-sessions-from-the-gateway.md)).
 - **`argus-model-engine`:** a single instance receives the ticks, keeps in-memory windows (1s/1m) on event time and runs built-in Java indicators (SMA/EMA) from `argus-builtin-models`. Publishes every output to Kafka without blocking the fast path, and counts the ones it has to drop.
 - **`argus-data-archiver`:** consumes from Kafka and stores the ticks and indicator values in QuestDB.
 
-**Done when:** real BTCUSDT trades and top-of-book updates are being stored in the database, and a QuestDB query (`SAMPLE BY`) returns 1-minute candles built from them. This is the most important phase, because it validates the backbone of the system.
+**Done when:** real BTCUSDT trades and top-of-book updates are being stored in the database, and a QuestDB query (`SAMPLE BY`) returns 1-minute candles built from them, and an end-to-end test replays a recorded session in CI. This is the most important phase, because it validates the backbone of the system.
 
 ## Phase 3 · Python models & alerts
 
 **Goal:** the engine starts making decisions, driven by models that users write in Python.
 
 - **Proof of concept first:** confirm which `SandboxPolicy` GraalPy supports (`ISOLATED` or `UNTRUSTED`), and measure the cost of calling a sandboxed Python model from the engine ([ADR 0011](adr/0011-user-models-in-python-on-graalpy.md)).
-- **`argus-feed-player`:** replays recorded sessions, for backtests and for instruments Binance does not list ([ADR 0024](adr/0024-a-feed-player-for-replay-and-backtesting.md)).
 - **`argus-model-runtime`:** runs Python models with GraalPy inside the engine process, with isolation, CPU and memory limits, and warm-up on recent data before a deployment emits.
 - **`argus` Python SDK:** `ModelConfiguration`, the `Indicator` and `AlertRule` interfaces, read-only access to the built-in Java indicators, and `argus.math` for numerical functions that NumPy would otherwise provide.
 - **Models and deployments** distributed through the compacted topics `argus.models.v1` and `argus.model-deployments.v1`. The engine starts new deployments at runtime, without restarting. Models can use several instruments and other indicators' outputs ([ADR 0017](adr/0017-multi-instrument-models-and-event-time.md)).
