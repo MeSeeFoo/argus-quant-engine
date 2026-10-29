@@ -1,6 +1,6 @@
 # 0024. A feed player for replay and backtesting
 
-- **Status:** Accepted, to be built at the start of Phase 3
+- **Status:** Accepted, amended by [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) (recording from the gateway, the recording format, built in Phase 2)
 - **Date:** 2026-10-19
 - **Issues:** #11, #43
 
