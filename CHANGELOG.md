@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.0](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.2.0...v0.3.0) (2026-10-29)
+
+
+### Features
+
+* **feed-gateway:** connect to Binance's SBE market data stream ([#70](https://github.com/MeSeeFoo/argus-quant-engine/issues/70)) ([f80fc03](https://github.com/MeSeeFoo/argus-quant-engine/commit/f80fc03ed11a7d4007d2dc4320ecae0a158a87ee))
+
+
+### Refactoring
+
+* **feed-gateway:** queue market data in the application ([#82](https://github.com/MeSeeFoo/argus-quant-engine/issues/82)) ([b0d7a44](https://github.com/MeSeeFoo/argus-quant-engine/commit/b0d7a444b93a0c7360eaf76df4fe30d6001f15ad))
+
+
+### Documentation
+
+* **adr:** publish market data to Kafka from the feed gateway ([#97](https://github.com/MeSeeFoo/argus-quant-engine/issues/97)) ([c43248d](https://github.com/MeSeeFoo/argus-quant-engine/commit/c43248d065b1edf1e6f6f8c6c8af76a39db67e45))
+* **adr:** publish market data to Kafka from the feed gateway ([#97](https://github.com/MeSeeFoo/argus-quant-engine/issues/97)) ([23415d3](https://github.com/MeSeeFoo/argus-quant-engine/commit/23415d3fefa6e42946871d7b8dac1618120b9b21))
+* **adr:** record and replay sessions in the feed player ([#99](https://github.com/MeSeeFoo/argus-quant-engine/issues/99)) ([a4dc3ea](https://github.com/MeSeeFoo/argus-quant-engine/commit/a4dc3eae751f99ceeb63814e8bf9af25da25e304))
+* **adr:** record and replay sessions in the feed player ([#99](https://github.com/MeSeeFoo/argus-quant-engine/issues/99)) ([121ea6a](https://github.com/MeSeeFoo/argus-quant-engine/commit/121ea6a515de6a1c204d1439991c5990e94696f6))
+* **feed-gateway:** explain why AgentLifecycle is synchronized ([#82](https://github.com/MeSeeFoo/argus-quant-engine/issues/82)) ([7769fc9](https://github.com/MeSeeFoo/argus-quant-engine/commit/7769fc9db1f96b4e81ad5bf50dc9677869be740d))
+
+
+### Build
+
+* **deps:** bump grafana/otel-lgtm from 0.36.0 to 0.37.0 in /infra/docker in the images-minor-and-patch group ([5b416bf](https://github.com/MeSeeFoo/argus-quant-engine/commit/5b416bf4434dfa5d0b5eb419f6c1959495650143))
+
 ## [0.2.0](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.1.0...v0.2.0) (2026-10-28)
 
 
