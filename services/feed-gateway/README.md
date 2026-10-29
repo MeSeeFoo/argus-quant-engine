@@ -9,7 +9,7 @@ Ports and adapters as laid out in [ADR 0009](../../docs/adr/0009-hexagonal-archi
 ```text
 com.argus.feedgateway
 ├── domain                   Trade, BestBidAsk (mutable, reused), Instrument(s), Decimal64, BookUpdateFilter
-├── application              MarketDataQueue (where data enters), MarketDataRelay (the use case), FeedAgent (the thread that runs it), MarketDataCounters
+├── application              MarketDataQueue (where data enters) with TradeSlot and BidAskSlot (its layout), MarketDataRelay (the use case), FeedAgent (the thread that runs it), MarketDataCounters
 │   ├── port.in              IngestMarketData: decoded market data, queued for the agent
 │   └── port.out             MarketDataPublisher: the fast path
 ├── adapter
@@ -43,7 +43,7 @@ Spring builds the objects and starts the agent on its own thread through an Agro
 
 [`MarketDataQueue`](src/main/java/com/argus/feedgateway/application/MarketDataQueue.java) implements `IngestMarketData`, and is where market data enters:
 
-- **Thread-safe, never waits.** Adapters call it from their own threads, several at once. Each event is copied into a pre-allocated ring buffer (1 MiB, room for about fifteen thousand events) in a fixed layout, with the instrument as its index. When the ring is full the event is dropped and counted.
+- **Thread-safe, never waits.** Adapters call it from their own threads, several at once. Each event is copied into a pre-allocated ring buffer (1 MiB, room for about fifteen thousand events) in a fixed layout, with the instrument as its index: [`TradeSlot`](src/main/java/com/argus/feedgateway/application/TradeSlot.java) and [`BidAskSlot`](src/main/java/com/argus/feedgateway/application/BidAskSlot.java) copy the fields in and out. When the ring is full the event is dropped and counted. The class comment explains why the ring holds bytes and not reusable objects, as the LMAX Disruptor would.
 - **Rejections that need no state.** A trade or top-of-book update for an instrument the gateway does not relay, or whose prices or quantities do not fit `Decimal64`, is rejected before it is queued, as a whole and never rounded.
 
 [`MarketDataRelay`](src/main/java/com/argus/feedgateway/application/MarketDataRelay.java) is the use case, fed by the queue:
