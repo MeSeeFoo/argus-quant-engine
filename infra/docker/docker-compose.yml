@@ -69,7 +69,7 @@ services:
       start_period: 60s
 
   questdb:
-    image: questdb/questdb:10.0.1
+    image: questdb/questdb:10.1.0
     ports:
       - "${QUESTDB_HTTP_PORT:?set in .env}:9000" # web console + REST
       - "${QUESTDB_ILP_PORT:?set in .env}:9009" # InfluxDB Line Protocol (TCP)
@@ -153,7 +153,7 @@ services:
 
   grafana:
     # All-in-one OpenTelemetry backend: Collector, Prometheus, Tempo, Loki, Pyroscope and Grafana.
-    image: grafana/otel-lgtm:0.37.0
+    image: grafana/otel-lgtm:0.38.1
     ports:
       - "${GRAFANA_PORT:?set in .env}:3000"
       - "${OTLP_GRPC_PORT:?set in .env}:4317"
