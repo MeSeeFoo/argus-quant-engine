@@ -11,11 +11,14 @@ com.argus.feedgateway
 ├── domain                   Trade, BestBidAsk (mutable, reused), Instrument(s), Decimal64, BookUpdateFilter
 ├── application              MarketDataQueue (where data enters) with TradeSlot and BidAskSlot (its layout), MarketDataRelay (the use case), FeedAgent (the thread that runs it), MarketDataCounters
 │   ├── port.in              IngestMarketData: decoded market data, queued for the agent
-│   └── port.out             MarketDataPublisher: the fast path
+│   └── port.out             MarketDataPublisher: one per transport, fast and durable path
 ├── adapter
 │   ├── in.binance           BinanceStreamClient + BinanceStreamDecoder, with their configuration
-│   └── out.aeron            AeronMarketDataPublisher, with its configuration
-└── config                   Instruments, the use case and the agent: nothing about Binance or Aeron
+│   ├── out                  PublicationCounters and PublicationMetrics, shared by the outbound adapters
+│   ├── out.aeron            AeronMarketDataPublisher, with its configuration
+│   └── out.kafka            KafkaMarketDataPublisher with KafkaTradeSlot (its ring's layout), KafkaBidAskSlot (for #109) and ProtobufMappers, with its configuration
+├── config                   Instruments, the use case and the agent: nothing about Binance, Aeron or Kafka
+└── utils                    Usable from any package: AgentLifecycle (runs an agent while Spring runs), FailureLog (a throttled error log)
 ```
 
 A frame's journey. The adapter decodes on the connection's thread and hands the events over; from the queue on, everything runs on the gateway agent's thread:
@@ -63,7 +66,7 @@ The gateway reads Binance's [SBE market data stream](https://developers.binance.
 
 - **API key.** It goes in the `X-MBX-APIKEY` header and comes from the `BINANCE_API_KEY` environment variable. It is never logged or committed, and the gateway refuses to start without it. Binance only accepts Ed25519 keys for this stream; a read-only key is enough.
 - **Pings.** Binance pings every 20 seconds and closes the connection after a minute without a pong. The JDK client answers each ping with a pong carrying its payload.
-- **Text frames.** Subscription responses and `serverShutdown` events are logged for now. Reconnecting is story [2.3].
+- **Text frames.** Subscription responses and `serverShutdown` events are logged for now. Reconnecting is story [2.8](https://github.com/MeSeeFoo/argus-quant-engine/issues/66).
 - **From the connection to the gateway.** The connection's callbacks run on the HTTP client's threads. Frames that arrive in parts are put back together first; a frame larger than 128 KiB is dropped and counted. Each complete frame is decoded there, with its receive time, and its events are handed to `IngestMarketData`, which never waits.
 
 **Decoding.** [`BinanceStreamDecoder`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceStreamDecoder.java) decodes `TradesStreamEvent` and `BestBidAskStreamEvent` with flyweights, on the connection's thread. Each connection has its own decoder, so two connections never share one. One trades event can carry several trades, each handed over on its own. Other messages, other schemas, malformed frames and symbols outside the shard are counted in [`BinanceCounters`](src/main/java/com/argus/feedgateway/adapter/in/binance/BinanceCounters.java) and ignored.
@@ -93,7 +96,7 @@ Tests build synthetic frames with Binance's encoders, and run the client against
 - **Transport** ([ADR 0021](../../docs/adr/0021-run-everything-on-fargate-with-aeron-over-udp.md)):
   - an embedded Media Driver in its own directory, whose threads back off instead of spinning;
   - one `ExclusivePublication` per shard, over UDP with a dynamic multi-destination-cast control endpoint, where subscribers register. Flow control is `fc=max`: the fastest subscriber sets the pace, and a slower one loses data on its own side (it sees gaps) instead of slowing the gateway down. Those losses are the subscriber's, not counted here.
-- **Sequence.** `Trade` and `BestBidAsk` share one `sequence`, starting at 1. A `Heartbeat` carries the last one (0 before the first message).
+- **Sequence.** `Trade` and `BestBidAsk` share one `sequence`, starting at 1, assigned by `MarketDataRelay` so that every transport numbers a message the same. A `Heartbeat` carries the last one (0 before the first message).
 - **Never blocks.** When Aeron refuses a message (no subscriber, back-pressure, a closed publication), the message is dropped and counted. It keeps its sequence, so subscribers see the loss as a gap. The one retry is immediate and single, after `ADMIN_ACTION`: the offer reached the end of a term and rotated it without writing the message.
 - **Threading and allocation.** Single-threaded and allocation-free, including when subscribers fall behind ([`AeronMarketDataPublisherTest`](src/test/java/com/argus/feedgateway/adapter/out/aeron/AeronMarketDataPublisherTest.java) runs a real driver and subscriber).
 
@@ -102,14 +105,35 @@ Tests build synthetic frames with Binance's encoders, and run the client against
 | `argus.feed-gateway.aeron.channel` | `aeron:udp?control=localhost:40456\|control-mode=dynamic\|fc=max` | Publication channel. Subscribers use `aeron:udp?endpoint=<their host>:0\|control=<this control endpoint>\|control-mode=dynamic` |
 | `argus.feed-gateway.aeron.stream-id` | `1001` | Stream of shard 1 |
 
+## Outbound adapter: Kafka
+
+Under construction in [#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108) (trades) and [#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109) (conflated top of book). The gateway publishes market data on the durable path too ([ADR 0027](../../docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)), as the canonical Protobuf `Trade` and `BestBidAsk` of [`argus-contracts`](../../contracts/README.md), with schemas in Apicurio ([ADR 0008](../../docs/adr/0008-apicurio-as-schema-registry-in-every-environment.md)).
+
+- **Never blocks the agent** ([ADR 0005](../../docs/adr/0005-the-engine-never-blocks-on-kafka.md)). [`KafkaMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaMarketDataPublisher.java) only copies each trade into a ring buffer of its own, in the layout of [`KafkaTradeSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaTradeSlot.java): its sequence, its fields, and the instrument's id, read back from the shard's `Instruments` with its venue and symbol. When that ring is full the trade is dropped and counted. [`KafkaBidAskSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaBidAskSlot.java) is the same layout for a top of book, for the conflation of #109. A separate publisher thread drains the ring and sends to Kafka.
+- **Mapping.** [`ProtobufMappers`](src/main/java/com/argus/feedgateway/adapter/out/kafka/ProtobufMappers.java) maps the events read back from the ring to the Protobuf messages, on the publisher thread. Prices and quantities are copied as they are: they are already `Decimal64` mantissas at the contract's scale. The sequence is the one of the fast path, so a consumer can match both. `aggressorSide` maps to `SIDE_BUY` or `SIDE_SELL`, never `SIDE_UNSPECIFIED`.
+- **Trades only, for now.** Every trade goes to Kafka. The top of book does not yet: it must reach `argus.market.quotes.v1` conflated, the latest per instrument at most once per interval, and that arrives with #109. Until then nothing is sent to that topic, instead of every update.
+- **Topics and key.** `argus.market.trades.v1` and `argus.market.quotes.v1` ([`topics.conf`](../../infra/docker/kafka/topics.conf)), keyed by `VENUE:SYMBOL`, so each instrument stays in order within its partition.
+- **No heartbeats.** `Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
+- **Acknowledgements and failures.** A record counts as published when Kafka acknowledges it: the adapter's `ProducerListener`, which Spring Boot plugs into its `KafkaTemplate`, counts acknowledgements and failures. A record that cannot even be handed to Kafka is counted as failed too, and the sender goes on with the next. Failures are logged at most once every 10 s, so an outage does not flood the log.
+- **Serialization.** Keys as text and values with Apicurio's `ProtobufKafkaSerializer`, which registers the schemas on first use only in the local environment (`APICURIO_AUTO_REGISTER`, true by default).
+
+| Property | Default | Meaning |
+| :--- | :--- | :--- |
+| `argus.feed-gateway.kafka.trade-topic-name` | `argus.market.trades.v1` | Topic of every `Trade` |
+| `argus.feed-gateway.kafka.best-bid-ask-topic-name` | `argus.market.quotes.v1` | Topic of the conflated `BestBidAsk` |
+| `argus.feed-gateway.kafka.buffer-capacity` | `1048576` | Bytes of the ring between the gateway agent and the Kafka sender, a power of two |
+| `argus.feed-gateway.kafka.sender-idle-sleep` | `5ms` | How long the Kafka sender parks when the ring is empty: the most an event waits before it is handed to Kafka |
+| `spring.kafka.bootstrap-servers` | `${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}` | Kafka of the local environment |
+| `spring.kafka.producer.properties.apicurio.registry.url` | `${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}` | Apicurio of the local environment |
+
 ## Metrics
 
 At `/actuator/metrics`:
 
 | Metric | Tag | Meaning |
 | :--- | :--- | :--- |
-| `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` | Messages handed to Aeron |
-| `argus.feed.messages.dropped` | `reason`: `queue_full` (gateway); `not_connected`, `back_pressured`, `closed`, `other` (Aeron adapter) | Messages dropped instead of blocking |
+| `argus.feed.messages.published` | `type`: `trade`, `best_bid_ask`, `heartbeat` (Aeron only); `transport`: `aeron`, `kafka` | Messages handed to each transport |
+| `argus.feed.messages.dropped` | `reason` and `transport`: `queue_full` with `all` (gateway, before any transport); `not_connected`, `back_pressured`, `closed`, `other` with `aeron`; `ring_full`, `send_failed` with `kafka` | Messages dropped instead of blocking |
 | `argus.feed.messages.rejected` | `reason`: `unsupported`, `unknown_symbol` (Binance adapter); `unrepresentable`, `stale_book`, `unknown_instrument` (gateway) | Venue messages received but not published |
 | `argus.feed.frames.dropped` | | Frames dropped on arrival because they were larger than accepted |
 

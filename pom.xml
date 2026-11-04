@@ -56,6 +56,8 @@
         <agrona.version>2.7.0</agrona.version>
         <sbe.version>1.41.0</sbe.version>
         <protobuf.version>4.36.2</protobuf.version>
+        <!-- Same version as the registry in infra/docker (ADR 0008) -->
+        <apicurio-registry.version>3.3.3</apicurio-registry.version>
         <junit.version>6.1.3</junit.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.5.1</archunit.version>
@@ -151,6 +153,11 @@
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.apicurio</groupId>
+                <artifactId>apicurio-registry-protobuf-serde-kafka</artifactId>
+                <version>${apicurio-registry.version}</version>
             </dependency>
 
             <!-- Security overrides, see lz4-java.version and snappy-java.version -->
