@@ -194,6 +194,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
+                        <!-- Reports every use of a deprecated API, so -Werror fails on it as IntelliJ
+                             does (it compiles with -deprecation); javac otherwise only prints a note. -->
+                        <showDeprecation>true</showDeprecation>
                         <!-- Error Prone runs inside javac; it needs the flags in .mvn/jvm.config. -->
                         <compilerArgs>
                             <arg>-Werror</arg>
