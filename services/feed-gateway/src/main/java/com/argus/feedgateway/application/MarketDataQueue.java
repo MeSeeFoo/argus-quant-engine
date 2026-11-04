@@ -26,7 +26,9 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor;
  * </ul>
  *
  * <p>Events are copied into a pre-allocated ring buffer in a fixed layout ({@link TradeSlot},
- * {@link BidAskSlot}). Queueing is thread-safe and draining is single-threaded; neither allocates.
+ * {@link BidAskSlot}), with the instrument as its {@linkplain
+ * com.argus.feedgateway.domain.Instrument#id id}. Queueing is thread-safe and draining is
+ * single-threaded; neither allocates.
  *
  * <p>Why bytes and not a ring of reusable {@code Trade} objects, such as the LMAX Disruptor's:
  *
@@ -71,7 +73,7 @@ public final class MarketDataQueue implements IngestMarketData {
 
   @Override
   public void onTrade(Trade trade) {
-    int instrument = instruments.indexOf(trade.instrument());
+    int instrument = trade.instrument().id();
     if (instrument == Instruments.UNKNOWN) {
       counters.unknownInstrument();
       return;
@@ -91,7 +93,7 @@ public final class MarketDataQueue implements IngestMarketData {
 
   @Override
   public void onBestBidAsk(BestBidAsk bestBidAsk) {
-    int instrument = instruments.indexOf(bestBidAsk.instrument());
+    int instrument = bestBidAsk.instrument().id();
     if (instrument == Instruments.UNKNOWN) {
       counters.unknownInstrument();
       return;
@@ -122,10 +124,10 @@ public final class MarketDataQueue implements IngestMarketData {
   private void onEvent(int type, MutableDirectBuffer buffer, int index, int length) {
     if (type == TRADE) {
       TradeSlot.read(buffer, index, instruments, trade);
-      relay.onTrade(trade);
+      relay.sendTrade(trade);
     } else {
       BidAskSlot.read(buffer, index, instruments, book);
-      relay.onBestBidAsk(book);
+      relay.sendBestBidAsk(book);
     }
   }
 }

@@ -24,6 +24,14 @@ class InstrumentsTest {
   }
 
   @Test
+  void numbersEachInstrumentWithItsId() {
+    assertThat(instruments.get(0).id()).isZero();
+    assertThat(instruments.get(1).id()).isEqualTo(1);
+    assertThat(BTCUSDT.id()).as("created outside the shard").isEqualTo(Instruments.UNKNOWN);
+    assertThat(instruments.get(0)).as("the id is not part of equality").isEqualTo(BTCUSDT);
+  }
+
+  @Test
   void findsAnInstrumentBySymbolBytes() {
     byte[] buffer = new byte[25];
     int length = copy("ETHUSDT", buffer);

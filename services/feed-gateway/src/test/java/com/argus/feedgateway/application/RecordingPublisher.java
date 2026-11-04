@@ -35,9 +35,12 @@ public final class RecordingPublisher implements MarketDataPublisher {
   public final List<Trade> trades = new ArrayList<>();
   public final List<BestBidAsk> bestBidAsks = new ArrayList<>();
   public final List<Long> heartbeats = new ArrayList<>();
+  // The sequence passed with each call, heartbeats included, in call order
+  public final List<Long> sequences = new ArrayList<>();
 
   @Override
-  public void publishTrade(com.argus.feedgateway.domain.Trade trade) {
+  public void publishTrade(com.argus.feedgateway.domain.Trade trade, long sequence) {
+    sequences.add(sequence);
     trades.add(
         new Trade(
             trade.instrument(),
@@ -50,7 +53,8 @@ public final class RecordingPublisher implements MarketDataPublisher {
   }
 
   @Override
-  public void publishBestBidAsk(com.argus.feedgateway.domain.BestBidAsk book) {
+  public void publishBestBidAsk(com.argus.feedgateway.domain.BestBidAsk book, long sequence) {
+    sequences.add(sequence);
     bestBidAsks.add(
         new BestBidAsk(
             book.instrument(),
@@ -64,7 +68,8 @@ public final class RecordingPublisher implements MarketDataPublisher {
   }
 
   @Override
-  public void publishHeartbeat(long epochNow) {
+  public void publishHeartbeat(long epochNow, long sequence) {
+    sequences.add(sequence);
     heartbeats.add(epochNow);
   }
 }
