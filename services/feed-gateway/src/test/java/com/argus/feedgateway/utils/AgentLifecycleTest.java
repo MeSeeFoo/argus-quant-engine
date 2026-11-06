@@ -1,4 +1,4 @@
-package com.argus.feedgateway.config;
+package com.argus.feedgateway.utils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -9,6 +9,7 @@ import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.SleepingMillisIdleStrategy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.SmartLifecycle;
 
 class AgentLifecycleTest {
 
@@ -63,6 +64,13 @@ class AgentLifecycleTest {
 
     assertThat(agent.worked.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(lifecycle.isRunning()).isTrue();
+  }
+
+  @Test
+  void runsInTheDefaultPhaseUnlessGivenOne() {
+    assertThat(lifecycle.getPhase()).isEqualTo(SmartLifecycle.DEFAULT_PHASE);
+    assertThat(new AgentLifecycle(agent, new SleepingMillisIdleStrategy(1), 10).getPhase())
+        .isEqualTo(10);
   }
 
   private static final class RecordingAgent implements Agent {

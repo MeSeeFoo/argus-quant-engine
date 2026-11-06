@@ -14,15 +14,19 @@ import org.junit.jupiter.api.Test;
 
 class MarketDataQueueTest {
 
-  private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
-  private static final Instrument ETHUSDT = new Instrument("BINANCE", "ETHUSDT");
+  private static final Instruments INSTRUMENTS =
+      new Instruments(
+          List.of(new Instrument("BINANCE", "BTCUSDT"), new Instrument("BINANCE", "ETHUSDT")));
+  // As the adapters pass them: from the shard's instruments, with their id
+  private static final Instrument BTCUSDT = INSTRUMENTS.get(0);
+  private static final Instrument ETHUSDT = INSTRUMENTS.get(1);
   private static final int CAPACITY = 64 * 1024;
 
-  private final Instruments instruments = new Instruments(List.of(BTCUSDT, ETHUSDT));
+  private final Instruments instruments = INSTRUMENTS;
   private final RecordingPublisher publisher = new RecordingPublisher();
   private final MarketDataCounters counters = new MarketDataCounters();
   private final MarketDataRelay relay =
-      new MarketDataRelay(instruments, publisher, counters, 1_000_000_000L);
+      new MarketDataRelay(instruments, List.of(publisher), counters, 1_000_000_000L);
   private final MarketDataQueue queue = new MarketDataQueue(instruments, relay, counters, CAPACITY);
   private final Trade trade = new Trade();
   private final BestBidAsk book = new BestBidAsk();

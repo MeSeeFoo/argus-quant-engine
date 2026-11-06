@@ -56,6 +56,8 @@
         <agrona.version>2.7.0</agrona.version>
         <sbe.version>1.41.0</sbe.version>
         <protobuf.version>4.36.2</protobuf.version>
+        <!-- Same version as the registry in infra/docker (ADR 0008) -->
+        <apicurio-registry.version>3.3.3</apicurio-registry.version>
         <junit.version>6.1.3</junit.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.5.1</archunit.version>
@@ -152,6 +154,11 @@
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.apicurio</groupId>
+                <artifactId>apicurio-registry-protobuf-serde-kafka</artifactId>
+                <version>${apicurio-registry.version}</version>
+            </dependency>
 
             <!-- Security overrides, see lz4-java.version and snappy-java.version -->
             <dependency>
@@ -194,6 +201,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
+                        <!-- Reports every use of a deprecated API, so -Werror fails on it as IntelliJ
+                             does (it compiles with -deprecation); javac otherwise only prints a note. -->
+                        <showDeprecation>true</showDeprecation>
                         <!-- Error Prone runs inside javac; it needs the flags in .mvn/jvm.config. -->
                         <compilerArgs>
                             <arg>-Werror</arg>

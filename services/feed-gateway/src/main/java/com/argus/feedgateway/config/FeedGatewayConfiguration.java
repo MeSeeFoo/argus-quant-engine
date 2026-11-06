@@ -7,8 +7,10 @@ import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.Instrument;
 import com.argus.feedgateway.domain.Instruments;
+import com.argus.feedgateway.utils.AgentLifecycle;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.binder.MeterBinder;
+import java.util.List;
 import org.agrona.concurrent.BackoffIdleStrategy;
 import org.agrona.concurrent.SystemEpochNanoClock;
 import org.agrona.concurrent.SystemNanoClock;
@@ -38,14 +40,15 @@ class FeedGatewayConfiguration {
     return new MarketDataCounters();
   }
 
+  /** Relays to every outbound adapter that provides a {@code MarketDataPublisher}. */
   @Bean
   MarketDataRelay marketDataRelay(
       FeedGatewayProperties properties,
       Instruments instruments,
-      MarketDataPublisher marketDataPublisher,
+      List<MarketDataPublisher> marketDataPublishers,
       MarketDataCounters counters) {
     return new MarketDataRelay(
-        instruments, marketDataPublisher, counters, properties.heartbeatInterval().toNanos());
+        instruments, marketDataPublishers, counters, properties.heartbeatInterval().toNanos());
   }
 
   /** Where market data enters, offered to the inbound adapters as {@code IngestMarketData}. */
@@ -55,7 +58,7 @@ class FeedGatewayConfiguration {
     return new MarketDataQueue(instruments, marketDataRelay, counters, QUEUE_CAPACITY);
   }
 
-  /** The gateway agent, on its own thread from start to shutdown. */
+  /** The gateway agent, on its own thread from start to shut down. */
   @Bean
   AgentLifecycle feedAgent(MarketDataQueue marketDataQueue, MarketDataRelay marketDataRelay) {
     return new AgentLifecycle(
@@ -84,8 +87,10 @@ class FeedGatewayConfiguration {
           .register(registry);
       FunctionCounter.builder(
               "argus.feed.messages.dropped", counters, MarketDataCounters::droppedEvents)
-          .description("Messages dropped instead of blocking the fast path")
+          .description("Messages dropped instead of blocking")
           .tag("reason", "queue_full")
+          // Dropped before reaching any transport; the tag keys must match the adapters' drops
+          .tag("transport", "all")
           .register(registry);
     };
   }

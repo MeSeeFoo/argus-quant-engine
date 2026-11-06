@@ -5,19 +5,25 @@ import com.argus.feedgateway.domain.Trade;
 
 /**
  * Publishes market data in canonical values, and the liveness messages of an idle stream.
- * Implementations assign the sequence, and must neither block nor allocate. One thread calls every
- * method, and the objects it passes are only valid during the call.
+ * Implementations must neither block nor allocate. One thread calls every method, and the objects
+ * it passes are only valid during the call.
+ *
+ * <p>The caller assigns the sequence, so every transport numbers a message the same (ADR 0027). A
+ * message an implementation drops leaves a gap in its stream.
  */
 public interface MarketDataPublisher {
 
-  void publishTrade(Trade trade);
+  /** Publishes {@code trade} as message {@code sequence}, one more than the last one. */
+  void publishTrade(Trade trade, long sequence);
 
-  void publishBestBidAsk(BestBidAsk bestBidAsk);
+  /** Publishes {@code bestBidAsk} as message {@code sequence}, one more than the last one. */
+  void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence);
 
   /**
-   * Publishes a liveness message carrying the last sequence published.
+   * Publishes a liveness message, which takes no sequence of its own.
    *
    * @param epochNow sender clock, epoch nanoseconds: liveness only, never event time
+   * @param sequence the last one published, 0 before the first message
    */
-  void publishHeartbeat(long epochNow);
+  void publishHeartbeat(long epochNow, long sequence);
 }

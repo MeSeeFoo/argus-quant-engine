@@ -1,6 +1,21 @@
 spring:
   application:
     name: argus-feed-gateway
+  # The durable path's connection: Kafka and Apicurio of the local environment (infra/docker)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # Canonical Protobuf, with the schema in Apicurio (ADR 0008)
+      value-serializer: io.apicurio.registry.serde.protobuf.ProtobufKafkaSerializer
+      properties:
+        # With Kafka down a send waits this long for the cluster, on the sender thread only: 60 s by
+        # default. Shorter, so the sender gives up and moves on while the ring fills and drops
+        max.block.ms: 5000
+        apicurio.registry.url: ${APICURIO_REGISTRY_URL:http://localhost:8080/apis/registry/v3}
+        # Locally the serializer registers the schemas on first use. Elsewhere it must be false:
+        # schemas are registered before deploying (#6)
+        apicurio.registry.auto-register: ${APICURIO_AUTO_REGISTER:true}
 
 server:
   # 8080 is Apicurio in the local environment (infra/docker)
@@ -35,3 +50,11 @@ argus:
       channel: aeron:udp?control=localhost:40456|control-mode=dynamic|fc=max
       # Shard 1 (ADR 0023)
       stream-id: 1001
+
+    # Outbound adapter: the durable path over Kafka (ADR 0027), topics in infra/docker/kafka/topics.conf
+    kafka:
+      trade-topic-name: argus.market.trades.v1
+      best-bid-ask-topic-name: argus.market.quotes.v1
+      # Bytes of the ring buffer between the gateway agent and the Kafka sender, a power of two:
+      # about ten thousand events before they are dropped
+      buffer-capacity: 1048576

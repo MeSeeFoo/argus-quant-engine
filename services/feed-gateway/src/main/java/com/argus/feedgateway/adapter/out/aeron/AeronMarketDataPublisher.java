@@ -34,7 +34,7 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
   private static final int MAX_MESSAGE_LENGTH = 128;
 
   private final ExclusivePublication publication;
-  private final PublicationCounters counters;
+  private final AeronCounters aeronCounters = new AeronCounters();
 
   private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[MAX_MESSAGE_LENGTH]);
   private final MessageHeaderEncoder header = new MessageHeaderEncoder();
@@ -42,19 +42,22 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
   private final BestBidAskEncoder bestBidAskEncoder = new BestBidAskEncoder();
   private final HeartbeatEncoder heartbeatEncoder = new HeartbeatEncoder();
 
-  private long sequence;
-
-  public AeronMarketDataPublisher(ExclusivePublication publication, PublicationCounters counters) {
+  public AeronMarketDataPublisher(ExclusivePublication publication) {
     this.publication = publication;
-    this.counters = counters;
+  }
+
+  /** Heartbeats and drops, which only Aeron counts. */
+  public AeronCounters aeronCounters() {
+    return aeronCounters;
   }
 
   @Override
-  public void publishTrade(Trade trade) {
+  public void publishTrade(Trade trade, long sequence) {
     Instrument instrument = trade.instrument();
+
     tradeEncoder
         .wrapAndApplyHeader(buffer, 0, header)
-        .sequence(++sequence)
+        .sequence(sequence)
         .tradeId(trade.tradeId())
         .exchangeTimestamp(trade.exchangeTimestamp())
         .receiveTimestamp(trade.receiveTimestamp())
@@ -65,16 +68,16 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
     tradeEncoder.price().mantissa(trade.price());
     tradeEncoder.quantity().mantissa(trade.quantity());
     if (offer(MessageHeaderEncoder.ENCODED_LENGTH + tradeEncoder.encodedLength())) {
-      counters.countTrade();
+      aeronCounters.countTrade();
     }
   }
 
   @Override
-  public void publishBestBidAsk(BestBidAsk bestBidAsk) {
+  public void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence) {
     Instrument instrument = bestBidAsk.instrument();
     bestBidAskEncoder
         .wrapAndApplyHeader(buffer, 0, header)
-        .sequence(++sequence)
+        .sequence(sequence)
         .bookUpdateId(bestBidAsk.bookUpdateId())
         .exchangeTimestamp(bestBidAsk.exchangeTimestamp())
         .receiveTimestamp(bestBidAsk.receiveTimestamp())
@@ -85,15 +88,15 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
     bestBidAskEncoder.askPrice().mantissa(bestBidAsk.askPrice());
     bestBidAskEncoder.askQuantity().mantissa(bestBidAsk.askQuantity());
     if (offer(MessageHeaderEncoder.ENCODED_LENGTH + bestBidAskEncoder.encodedLength())) {
-      counters.countBestBidAsk();
+      aeronCounters.countBestBidAsk();
     }
   }
 
   @Override
-  public void publishHeartbeat(long epochNow) {
+  public void publishHeartbeat(long epochNow, long sequence) {
     heartbeatEncoder.wrapAndApplyHeader(buffer, 0, header).sequence(sequence).timestamp(epochNow);
     if (offer(MessageHeaderEncoder.ENCODED_LENGTH + heartbeatEncoder.encodedLength())) {
-      counters.countHeartbeat();
+      aeronCounters.countHeartbeat();
     }
   }
 
@@ -108,13 +111,13 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
       return true;
     }
     if (result == Publication.NOT_CONNECTED) {
-      counters.countDroppedNotConnected();
+      aeronCounters.countDroppedNotConnected();
     } else if (result == Publication.BACK_PRESSURED) {
-      counters.countDroppedBackPressured();
+      aeronCounters.countDroppedBackPressured();
     } else if (result == Publication.CLOSED || result == Publication.MAX_POSITION_EXCEEDED) {
-      counters.countDroppedClosed();
+      aeronCounters.countDroppedClosed();
     } else {
-      counters.countDroppedOther();
+      aeronCounters.countDroppedOther();
     }
     return false;
   }

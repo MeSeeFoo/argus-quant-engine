@@ -1,9 +1,7 @@
 package com.argus.feedgateway.application;
 
 import com.argus.feedgateway.application.port.in.IngestMarketData;
-import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.BestBidAsk;
-import com.argus.feedgateway.domain.Decimal64;
 import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
 import java.nio.ByteBuffer;
@@ -27,41 +25,28 @@ import org.agrona.concurrent.ringbuffer.RingBufferDescriptor;
  *       agent.
  * </ul>
  *
- * <p>Events are copied into a pre-allocated ring buffer in a fixed layout, with the instrument as
- * its index in {@link Instruments}. Queueing is thread-safe and draining is single-threaded;
- * neither allocates.
+ * <p>Events are copied into a pre-allocated ring buffer in a fixed layout ({@link TradeSlot},
+ * {@link BidAskSlot}), with the instrument as its {@linkplain
+ * com.argus.feedgateway.domain.Instrument#id id}. Queueing is thread-safe and draining is
+ * single-threaded; neither allocates.
+ *
+ * <p>Why bytes and not a ring of reusable {@code Trade} objects, such as the LMAX Disruptor's:
+ *
+ * <ul>
+ *   <li>The hard part is not creating objects but handing them between threads: several producers
+ *       (the WebSocket threads) and one consumer (the agent) need to claim a slot, write it,
+ *       publish it with a memory barrier and free it. Agrona's ring buffer already does this, and
+ *       Agrona is on the classpath for Aeron; the Disruptor would be a second ring buffer library.
+ *   <li>The Disruptor's non-blocking claim with several producers, {@code tryNext()}, reports a
+ *       full ring by throwing an exception. The hot path does not use exceptions as control flow,
+ *       and the alternative, {@code next()}, waits for a free slot, which an adapter must never do.
+ *   <li>The copy costs the same either way: a handful of {@code long} fields, no encoding.
+ * </ul>
  */
 public final class MarketDataQueue implements IngestMarketData {
 
   private static final int TRADE = 1;
   private static final int BEST_BID_ASK = 2;
-
-  // Trade layout: the longs first, so they stay aligned
-  private static final int TRADE_ID = 0;
-  private static final int TRADE_PRICE = TRADE_ID + Long.BYTES;
-  private static final int TRADE_QUANTITY = TRADE_PRICE + Long.BYTES;
-  private static final int TRADE_EXCHANGE_TIMESTAMP = TRADE_QUANTITY + Long.BYTES;
-  private static final int TRADE_RECEIVE_TIMESTAMP = TRADE_EXCHANGE_TIMESTAMP + Long.BYTES;
-  private static final int TRADE_INSTRUMENT = TRADE_RECEIVE_TIMESTAMP + Long.BYTES;
-  private static final int TRADE_AGGRESSOR_SIDE = TRADE_INSTRUMENT + Integer.BYTES;
-  private static final int TRADE_LENGTH = TRADE_AGGRESSOR_SIDE + Byte.BYTES;
-
-  // Top-of-book layout
-  private static final int BOOK_UPDATE_ID = 0;
-  private static final int BOOK_BID_PRICE = BOOK_UPDATE_ID + Long.BYTES;
-  private static final int BOOK_BID_QUANTITY = BOOK_BID_PRICE + Long.BYTES;
-  private static final int BOOK_ASK_PRICE = BOOK_BID_QUANTITY + Long.BYTES;
-  private static final int BOOK_ASK_QUANTITY = BOOK_ASK_PRICE + Long.BYTES;
-  private static final int BOOK_EXCHANGE_TIMESTAMP = BOOK_ASK_QUANTITY + Long.BYTES;
-  private static final int BOOK_RECEIVE_TIMESTAMP = BOOK_EXCHANGE_TIMESTAMP + Long.BYTES;
-  private static final int BOOK_INSTRUMENT = BOOK_RECEIVE_TIMESTAMP + Long.BYTES;
-  private static final int BOOK_LENGTH = BOOK_INSTRUMENT + Integer.BYTES;
-
-  // Values in the queue are canonical already: read back as decimals with the canonical exponent
-  private static final int CANONICAL = -Decimal64.SCALE;
-  // Written explicitly, so reordering the enum cannot change the layout
-  private static final byte BUY = 0;
-  private static final byte SELL = 1;
 
   private final Instruments instruments;
   private final MarketDataRelay relay;
@@ -88,7 +73,7 @@ public final class MarketDataQueue implements IngestMarketData {
 
   @Override
   public void onTrade(Trade trade) {
-    int instrument = instruments.indexOf(trade.instrument());
+    int instrument = trade.instrument().id();
     if (instrument == Instruments.UNKNOWN) {
       counters.unknownInstrument();
       return;
@@ -97,26 +82,18 @@ public final class MarketDataQueue implements IngestMarketData {
       counters.unrepresentableValue();
       return;
     }
-    int index = events.tryClaim(TRADE, TRADE_LENGTH);
+    int index = events.tryClaim(TRADE, TradeSlot.LENGTH);
     if (index < 0) {
       counters.droppedEvent();
       return;
     }
-    MutableDirectBuffer buffer = events.buffer();
-    buffer.putLong(index + TRADE_ID, trade.tradeId());
-    buffer.putLong(index + TRADE_PRICE, trade.price());
-    buffer.putLong(index + TRADE_QUANTITY, trade.quantity());
-    buffer.putLong(index + TRADE_EXCHANGE_TIMESTAMP, trade.exchangeTimestamp());
-    buffer.putLong(index + TRADE_RECEIVE_TIMESTAMP, trade.receiveTimestamp());
-    buffer.putInt(index + TRADE_INSTRUMENT, instrument);
-    buffer.putByte(
-        index + TRADE_AGGRESSOR_SIDE, trade.aggressorSide() == AggressorSide.SELL ? SELL : BUY);
+    TradeSlot.write(events.buffer(), index, trade, instrument);
     events.commit(index);
   }
 
   @Override
   public void onBestBidAsk(BestBidAsk bestBidAsk) {
-    int instrument = instruments.indexOf(bestBidAsk.instrument());
+    int instrument = bestBidAsk.instrument().id();
     if (instrument == Instruments.UNKNOWN) {
       counters.unknownInstrument();
       return;
@@ -125,20 +102,12 @@ public final class MarketDataQueue implements IngestMarketData {
       counters.unrepresentableValue();
       return;
     }
-    int index = events.tryClaim(BEST_BID_ASK, BOOK_LENGTH);
+    int index = events.tryClaim(BEST_BID_ASK, BidAskSlot.LENGTH);
     if (index < 0) {
       counters.droppedEvent();
       return;
     }
-    MutableDirectBuffer buffer = events.buffer();
-    buffer.putLong(index + BOOK_UPDATE_ID, bestBidAsk.bookUpdateId());
-    buffer.putLong(index + BOOK_BID_PRICE, bestBidAsk.bidPrice());
-    buffer.putLong(index + BOOK_BID_QUANTITY, bestBidAsk.bidQuantity());
-    buffer.putLong(index + BOOK_ASK_PRICE, bestBidAsk.askPrice());
-    buffer.putLong(index + BOOK_ASK_QUANTITY, bestBidAsk.askQuantity());
-    buffer.putLong(index + BOOK_EXCHANGE_TIMESTAMP, bestBidAsk.exchangeTimestamp());
-    buffer.putLong(index + BOOK_RECEIVE_TIMESTAMP, bestBidAsk.receiveTimestamp());
-    buffer.putInt(index + BOOK_INSTRUMENT, instrument);
+    BidAskSlot.write(events.buffer(), index, bestBidAsk, instrument);
     events.commit(index);
   }
 
@@ -154,34 +123,11 @@ public final class MarketDataQueue implements IngestMarketData {
 
   private void onEvent(int type, MutableDirectBuffer buffer, int index, int length) {
     if (type == TRADE) {
-      trade
-          .instrument(instruments.get(buffer.getInt(index + TRADE_INSTRUMENT)))
-          .tradeId(buffer.getLong(index + TRADE_ID))
-          .price(buffer.getLong(index + TRADE_PRICE), CANONICAL)
-          .quantity(buffer.getLong(index + TRADE_QUANTITY), CANONICAL)
-          .aggressorSide(
-              buffer.getByte(index + TRADE_AGGRESSOR_SIDE) == SELL
-                  ? AggressorSide.SELL
-                  : AggressorSide.BUY)
-          .exchangeTimestamp(buffer.getLong(index + TRADE_EXCHANGE_TIMESTAMP))
-          .receiveTimestamp(buffer.getLong(index + TRADE_RECEIVE_TIMESTAMP));
-      relay.onTrade(trade);
+      TradeSlot.read(buffer, index, instruments, trade);
+      relay.sendTrade(trade);
     } else {
-      book.instrument(instruments.get(buffer.getInt(index + BOOK_INSTRUMENT)))
-          .bookUpdateId(buffer.getLong(index + BOOK_UPDATE_ID))
-          .bid(
-              buffer.getLong(index + BOOK_BID_PRICE),
-              CANONICAL,
-              buffer.getLong(index + BOOK_BID_QUANTITY),
-              CANONICAL)
-          .ask(
-              buffer.getLong(index + BOOK_ASK_PRICE),
-              CANONICAL,
-              buffer.getLong(index + BOOK_ASK_QUANTITY),
-              CANONICAL)
-          .exchangeTimestamp(buffer.getLong(index + BOOK_EXCHANGE_TIMESTAMP))
-          .receiveTimestamp(buffer.getLong(index + BOOK_RECEIVE_TIMESTAMP));
-      relay.onBestBidAsk(book);
+      BidAskSlot.read(buffer, index, instruments, book);
+      relay.sendBestBidAsk(book);
     }
   }
 }
