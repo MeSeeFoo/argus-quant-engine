@@ -7,7 +7,8 @@ import org.jspecify.annotations.Nullable;
  * The top of the book on the venue, in canonical values: prices and quantities as {@code Decimal64}
  * mantissas, timestamps in epoch nanoseconds.
  *
- * <p>Mutable and reused, like {@link Trade}: read it before returning and never keep it.
+ * <p>Mutable and reused, like {@link Trade}: read it before returning and never keep it. To keep
+ * its values, {@linkplain #copyFrom copy them} into a {@code BestBidAsk} of your own.
  */
 public final class BestBidAsk {
 
@@ -19,6 +20,23 @@ public final class BestBidAsk {
   private long askQuantity;
   private long exchangeTimestamp;
   private long receiveTimestamp;
+
+  /**
+   * Overwrites this one with every value of {@code other}, without allocating. Both then share the
+   * same {@link Instrument}, which is immutable; changing either one afterwards does not affect the
+   * other.
+   */
+  public BestBidAsk copyFrom(BestBidAsk other) {
+    instrument = other.instrument;
+    bookUpdateId = other.bookUpdateId;
+    bidPrice = other.bidPrice;
+    bidQuantity = other.bidQuantity;
+    askPrice = other.askPrice;
+    askQuantity = other.askQuantity;
+    exchangeTimestamp = other.exchangeTimestamp;
+    receiveTimestamp = other.receiveTimestamp;
+    return this;
+  }
 
   public Instrument instrument() {
     return Objects.requireNonNull(instrument, "instrument not set");

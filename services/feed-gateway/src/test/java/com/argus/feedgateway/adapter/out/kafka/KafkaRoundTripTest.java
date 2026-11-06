@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.SleepingIdleStrategy;
+import org.agrona.concurrent.SystemNanoClock;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -88,9 +89,11 @@ class KafkaRoundTripTest {
     var kafka =
         new KafkaMarketDataPublisher(
             template,
-            new KafkaProperties(TRADES, QUOTES, Duration.ofMillis(1), 64 * 1024),
+            new KafkaProperties(
+                TRADES, QUOTES, Duration.ofMillis(1), 64 * 1024, Duration.ofSeconds(1)),
             instruments,
-            counters);
+            counters,
+            new SystemNanoClock());
     var fastPath = new RecordingPublisher();
     var relay =
         new MarketDataRelay(
