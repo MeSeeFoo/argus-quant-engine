@@ -251,8 +251,9 @@ class KafkaMarketDataPublisherTest {
     nanos += INTERVAL.toNanos();
     publisher.sendBufferedEventsToKafka(); // sends the latest, which may allocate
 
+    int flushes = 10_000;
     long emptyFlushes = 0;
-    for (int i = 0; i < batches; i++) {
+    for (int i = 0; i < flushes; i++) {
       nanos += INTERVAL.toNanos();
       long before = threads.getCurrentThreadAllocatedBytes();
       publisher.sendBufferedEventsToKafka();
@@ -260,8 +261,11 @@ class KafkaMarketDataPublisherTest {
     }
     assertThat(producer.history()).as("nothing else changed").hasSize(1);
 
-    assertThat(conflating).as("bytes allocated copying into the slots").isLessThan(1_024);
-    assertThat(emptyFlushes).as("bytes allocated flushing nothing").isLessThan(1_024);
+    // Under one byte each, as the smallest object takes 16: see the gateway agent's test below
+    assertThat(conflating)
+        .as("bytes allocated copying into the slots")
+        .isLessThan((long) batches * batch);
+    assertThat(emptyFlushes).as("bytes allocated flushing nothing").isLessThan(flushes);
   }
 
   @Test
@@ -361,6 +365,9 @@ class KafkaMarketDataPublisherTest {
    * What runs on the gateway agent's thread: copying into the ring, and dropping when it is full.
    * Only those calls are measured. Draining, which is the sender thread's job and allocates, runs
    * between the measured batches, on this thread but outside the measurement.
+   *
+   * <p>The limit is under one byte per event, as the smallest object takes 16: a fixed number of
+   * bytes would fail on what the JVM itself allocates now and then on the thread.
    */
   @Test
   void theGatewayAgentsSideAllocatesNothingWhetherTheRingHasRoomOrIsFull() {
@@ -393,8 +400,9 @@ class KafkaMarketDataPublisherTest {
     long whenFull = threads.getCurrentThreadAllocatedBytes() - before;
     assertThat(counters.droppedRingFull()).isPositive();
 
-    assertThat(withRoom).as("bytes allocated with room in the ring").isLessThan(1_024);
-    assertThat(whenFull).as("bytes allocated with the ring full").isLessThan(1_024);
+    long events = (long) batches * batch;
+    assertThat(withRoom).as("bytes allocated with room in the ring").isLessThan(events);
+    assertThat(whenFull).as("bytes allocated with the ring full").isLessThan(events);
   }
 
   /** Drains the whole ring, as the sender thread would, and forgets what was sent. */
