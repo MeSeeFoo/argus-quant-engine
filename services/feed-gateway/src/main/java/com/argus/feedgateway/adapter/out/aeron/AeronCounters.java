@@ -1,30 +1,19 @@
 package com.argus.feedgateway.adapter.out.aeron;
 
+import com.argus.feedgateway.adapter.out.PublicationCounters;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * What the fast-path publisher sent and dropped. Written by the publishing thread and read by
- * metrics from any thread.
+ * What only the Aeron adapter counts: heartbeats, and the reasons Aeron refuses a message. Written
+ * by the publishing thread and read by metrics from any thread.
  */
-public final class PublicationCounters {
+public final class AeronCounters extends PublicationCounters {
 
-  private final AtomicLong trades = new AtomicLong();
-  private final AtomicLong bestBidAsks = new AtomicLong();
   private final AtomicLong heartbeats = new AtomicLong();
   private final AtomicLong droppedNotConnected = new AtomicLong();
   private final AtomicLong droppedBackPressured = new AtomicLong();
   private final AtomicLong droppedClosed = new AtomicLong();
   private final AtomicLong droppedOther = new AtomicLong();
-
-  /** {@code Trade} messages handed to Aeron. */
-  public long trades() {
-    return trades.get();
-  }
-
-  /** {@code BestBidAsk} messages handed to Aeron. */
-  public long bestBidAsks() {
-    return bestBidAsks.get();
-  }
 
   /** {@code Heartbeat} messages handed to Aeron. */
   public long heartbeats() {
@@ -51,14 +40,6 @@ public final class PublicationCounters {
    */
   public long droppedOther() {
     return droppedOther.get();
-  }
-
-  void countTrade() {
-    trades.incrementAndGet();
-  }
-
-  void countBestBidAsk() {
-    bestBidAsks.incrementAndGet();
   }
 
   void countHeartbeat() {

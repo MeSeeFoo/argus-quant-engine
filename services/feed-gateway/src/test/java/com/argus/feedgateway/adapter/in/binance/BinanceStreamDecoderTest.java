@@ -36,7 +36,7 @@ class BinanceStreamDecoderTest {
   private final MarketDataQueue queue =
       new MarketDataQueue(
           instruments,
-          new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+          new MarketDataRelay(instruments, List.of(publisher), relayCounters, 1_000_000_000L),
           relayCounters,
           64 * 1024);
   private final BinanceStreamDecoder decoder =

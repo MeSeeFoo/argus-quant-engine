@@ -8,6 +8,9 @@ import org.jspecify.annotations.Nullable;
  * An instrument as the venue names it ({@code BINANCE:BTCUSDT}). Venue and symbol are uppercase
  * US-ASCII and fit the canonical fixed-length fields, so they are checked once here instead of on
  * every message.
+ *
+ * <p>The instruments of the shard come from {@link Instruments}, which gives each one its {@link
+ * #id}: the hot path indexes per-instrument state with it instead of looking the instrument up.
  */
 public final class Instrument {
 
@@ -20,11 +23,28 @@ public final class Instrument {
   private final String venue;
   private final String symbol;
   private final byte[] symbolBytes;
+  private final int id;
 
+  /**
+   * An instrument outside the shard's {@link Instruments}: its id is {@link Instruments#UNKNOWN}.
+   */
   public Instrument(String venue, String symbol) {
     this.venue = requireCode("venue", venue, MAX_VENUE_LENGTH);
     this.symbol = requireCode("symbol", symbol, MAX_SYMBOL_LENGTH);
     this.symbolBytes = symbol.getBytes(StandardCharsets.US_ASCII);
+    this.id = Instruments.UNKNOWN;
+  }
+
+  private Instrument(Instrument instrument, int id) {
+    this.venue = instrument.venue;
+    this.symbol = instrument.symbol;
+    this.symbolBytes = instrument.symbolBytes;
+    this.id = id;
+  }
+
+  /** The same instrument, numbered {@code id} by {@link Instruments}. */
+  Instrument withId(int id) {
+    return new Instrument(this, id);
   }
 
   /** Parses the {@code VENUE:SYMBOL} key used across Argus ({@code BINANCE:BTCUSDT}). */
@@ -42,6 +62,15 @@ public final class Instrument {
 
   public String symbol() {
     return symbol;
+  }
+
+  /**
+   * Its index in the shard's {@link Instruments}, or {@link Instruments#UNKNOWN} for an instrument
+   * the shard does not relay. Not part of equality: two instruments with the same venue and symbol
+   * are equal whatever their id.
+   */
+  public int id() {
+    return id;
   }
 
   /**

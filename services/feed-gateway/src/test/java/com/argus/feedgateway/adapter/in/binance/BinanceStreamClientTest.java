@@ -253,7 +253,7 @@ class BinanceStreamClientTest {
   private MarketDataQueue newQueue(int capacity) {
     return new MarketDataQueue(
         instruments,
-        new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+        new MarketDataRelay(instruments, List.of(publisher), relayCounters, 1_000_000_000L),
         relayCounters,
         capacity);
   }

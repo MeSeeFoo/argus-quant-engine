@@ -52,33 +52,35 @@
 
         <!-- Dependencies: the only place where versions are declared -->
         <spring-boot.version>4.1.2</spring-boot.version>
-        <aeron.version>1.53.3</aeron.version>
+        <aeron.version>1.54.0</aeron.version>
         <agrona.version>2.7.0</agrona.version>
         <sbe.version>1.41.0</sbe.version>
         <protobuf.version>4.36.2</protobuf.version>
+        <!-- Same version as the registry in infra/docker (ADR 0008) -->
+        <apicurio-registry.version>3.3.3</apicurio-registry.version>
         <junit.version>6.1.3</junit.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.5.1</archunit.version>
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Overrides the version brought by kafka-clients, which has known vulnerabilities
              (GHSA-mcr4-qmvw-px4g and others). Remove once Kafka ships 1.11.4 or newer. -->
-        <lz4-java.version>1.12.0</lz4-java.version>
+        <lz4-java.version>1.12.1</lz4-java.version>
         <!-- Same for snappy-java (GHSA-gwq9-9ffj-mvrv and others). Remove once Kafka ships 1.1.10.9 or newer. -->
-        <snappy-java.version>1.1.10.9</snappy-java.version>
+        <snappy-java.version>1.1.10.12</snappy-java.version>
 
         <!-- Plugins -->
-        <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
+        <maven-enforcer-plugin.version>3.7.0</maven-enforcer-plugin.version>
         <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.6.0</maven-surefire-plugin.version>
-        <maven-failsafe-plugin.version>3.6.0</maven-failsafe-plugin.version>
+        <maven-surefire-plugin.version>3.6.1</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.6.1</maven-failsafe-plugin.version>
         <maven-jar-plugin.version>3.5.1</maven-jar-plugin.version>
         <maven-wrapper-plugin.version>3.3.4</maven-wrapper-plugin.version>
         <exec-maven-plugin.version>3.6.4</exec-maven-plugin.version>
         <build-helper-maven-plugin.version>3.6.2</build-helper-maven-plugin.version>
         <protobuf-maven-plugin.version>5.1.11</protobuf-maven-plugin.version>
-        <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
-        <error-prone.version>2.50.0</error-prone.version>
-        <nullaway.version>0.14.2</nullaway.version>
+        <jacoco-maven-plugin.version>0.8.16</jacoco-maven-plugin.version>
+        <error-prone.version>2.51.0</error-prone.version>
+        <nullaway.version>0.14.3</nullaway.version>
         <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
@@ -152,6 +154,11 @@
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.apicurio</groupId>
+                <artifactId>apicurio-registry-protobuf-serde-kafka</artifactId>
+                <version>${apicurio-registry.version}</version>
+            </dependency>
 
             <!-- Security overrides, see lz4-java.version and snappy-java.version -->
             <dependency>
@@ -194,6 +201,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${maven-compiler-plugin.version}</version>
                     <configuration>
+                        <!-- Reports every use of a deprecated API, so -Werror fails on it as IntelliJ
+                             does (it compiles with -deprecation); javac otherwise only prints a note. -->
+                        <showDeprecation>true</showDeprecation>
                         <!-- Error Prone runs inside javac; it needs the flags in .mvn/jvm.config. -->
                         <compilerArgs>
                             <arg>-Werror</arg>

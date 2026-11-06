@@ -5,10 +5,12 @@ import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.BookUpdateFilter;
 import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
+import java.util.List;
 
 /**
  * The gateway's use case: relays the venue's market data, drained from the {@link MarketDataQueue},
- * to the fast path, and keeps the stream alive while the venue is quiet.
+ * to every outbound transport with one sequence (ADR 0027), and keeps the stream alive while the
+ * venue is quiet.
  *
  * <ul>
  *   <li>A top-of-book update not newer than the last one of its instrument is dropped. The queue
@@ -22,8 +24,7 @@ import com.argus.feedgateway.domain.Trade;
  */
 public final class MarketDataRelay {
 
-  private final Instruments instruments;
-  private final MarketDataPublisher publisher;
+  private final MarketDataPublisher[] publishers;
   private final MarketDataCounters counters;
   private final BookUpdateFilter bookUpdates;
   private final long heartbeatIntervalNanos;
@@ -32,36 +33,46 @@ public final class MarketDataRelay {
   // False until the first check, which asks for a heartbeat straight away
   private boolean heartbeatScheduled;
   private boolean publishedSinceLastCheck;
+  // Of the last message published, shared by every transport so they all number it the same
+  private long sequence;
 
   public MarketDataRelay(
       Instruments instruments,
-      MarketDataPublisher publisher,
+      List<MarketDataPublisher> publishers,
       MarketDataCounters counters,
       long heartbeatIntervalNanos) {
     if (heartbeatIntervalNanos <= 0) {
       throw new IllegalArgumentException("heartbeat interval must be positive");
     }
-    this.instruments = instruments;
-    this.publisher = publisher;
+    if (publishers.isEmpty()) {
+      throw new IllegalArgumentException("at least one publisher is needed");
+    }
+    // An array, so the hot path iterates it without an Iterator
+    this.publishers = publishers.toArray(MarketDataPublisher[]::new);
     this.counters = counters;
     this.bookUpdates = new BookUpdateFilter(instruments.size());
     this.heartbeatIntervalNanos = heartbeatIntervalNanos;
   }
 
   /** Publishes a trade of one of the gateway's instruments. */
-  public void onTrade(Trade trade) {
-    publisher.publishTrade(trade);
+  public void sendTrade(Trade trade) {
+    final long tradeSequence = ++sequence;
+    for (MarketDataPublisher publisher : publishers) {
+      publisher.publishTrade(trade, tradeSequence);
+    }
     publishedSinceLastCheck = true;
   }
 
   /** Publishes a top-of-book update of one of the gateway's instruments, unless it is stale. */
-  public void onBestBidAsk(BestBidAsk bestBidAsk) {
-    int instrument = instruments.indexOf(bestBidAsk.instrument());
-    if (!bookUpdates.accept(instrument, bestBidAsk.bookUpdateId())) {
+  public void sendBestBidAsk(BestBidAsk bestBidAsk) {
+    if (!bookUpdates.accept(bestBidAsk.instrument().id(), bestBidAsk.bookUpdateId())) {
       counters.staleBookUpdate();
       return;
     }
-    publisher.publishBestBidAsk(bestBidAsk);
+    final long bidAskSequence = ++sequence;
+    for (MarketDataPublisher publisher : publishers) {
+      publisher.publishBestBidAsk(bestBidAsk, bidAskSequence);
+    }
     publishedSinceLastCheck = true;
   }
 
@@ -85,7 +96,10 @@ public final class MarketDataRelay {
       publishedSinceLastCheck = false;
       return 0;
     }
-    publisher.publishHeartbeat(epochNow);
+    // A heartbeat is not a message of the stream: it carries the last sequence, not a new one
+    for (MarketDataPublisher publisher : publishers) {
+      publisher.publishHeartbeat(epochNow, sequence);
+    }
     return 1;
   }
 }

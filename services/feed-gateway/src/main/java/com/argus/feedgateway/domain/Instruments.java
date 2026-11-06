@@ -5,8 +5,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The instruments of the gateway's shard, numbered from 0 in configuration order. Per-instrument
- * state is kept in arrays indexed by that number, so the hot path never looks anything up in a map.
+ * The instruments of the gateway's shard, numbered from 0 in configuration order. Each one carries
+ * its number as its {@link Instrument#id}, and per-instrument state is kept in arrays indexed by
+ * it, so the hot path never looks anything up. Events must carry the instruments returned by {@link
+ * #get}: an equal instrument created elsewhere has no id.
  */
 public final class Instruments {
 
@@ -25,7 +27,10 @@ public final class Instruments {
         throw new IllegalArgumentException("duplicate symbol " + instrument);
       }
     }
-    this.instruments = instruments.toArray(Instrument[]::new);
+    this.instruments = new Instrument[instruments.size()];
+    for (int i = 0; i < this.instruments.length; i++) {
+      this.instruments[i] = instruments.get(i).withId(i);
+    }
   }
 
   public int size() {
@@ -50,7 +55,10 @@ public final class Instruments {
     return UNKNOWN;
   }
 
-  /** Returns the index of {@code instrument}, or {@link #UNKNOWN}. */
+  /**
+   * Returns the index of an instrument equal to {@code instrument}, or {@link #UNKNOWN}. A linear
+   * scan, for configuration: the hot path uses {@link Instrument#id}.
+   */
   public int indexOf(Instrument instrument) {
     for (int i = 0; i < instruments.length; i++) {
       if (instruments[i].equals(instrument)) {

@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 
 class FeedAgentTest {
 
-  private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
-
-  private final Instruments instruments = new Instruments(List.of(BTCUSDT));
+  private final Instruments instruments =
+      new Instruments(List.of(new Instrument("BINANCE", "BTCUSDT")));
+  private final Instrument btcusdt = instruments.get(0);
   private final RecordingPublisher publisher = new RecordingPublisher();
   private final MarketDataCounters counters = new MarketDataCounters();
-  private final MarketDataRelay relay = new MarketDataRelay(instruments, publisher, counters, 10);
+  private final MarketDataRelay relay =
+      new MarketDataRelay(instruments, List.of(publisher), counters, 10);
   private final MarketDataQueue queue =
       new MarketDataQueue(instruments, relay, counters, 64 * 1024);
   private long monotonicNow;
@@ -24,7 +25,7 @@ class FeedAgentTest {
 
   @Test
   void drainsTheQueueInBoundedBatchesAndKeepsTheStreamAlive() {
-    Trade trade = new Trade().instrument(BTCUSDT).price(1, 0).quantity(1, 0);
+    Trade trade = new Trade().instrument(btcusdt).price(1, 0).quantity(1, 0);
     for (int i = 1; i <= FeedAgent.EVENT_LIMIT + 5; i++) {
       queue.onTrade(trade.tradeId(i));
     }
