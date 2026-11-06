@@ -6,6 +6,7 @@ import com.argus.feedgateway.utils.AgentLifecycle;
 import com.google.protobuf.Message;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import org.agrona.concurrent.SleepingIdleStrategy;
+import org.agrona.concurrent.SystemNanoClock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +43,8 @@ class KafkaConfiguration {
       KafkaProperties properties,
       Instruments instruments,
       KafkaCounters kafkaCounters) {
-    return new KafkaMarketDataPublisher(kafkaTemplate, properties, instruments, kafkaCounters);
+    return new KafkaMarketDataPublisher(
+        kafkaTemplate, properties, instruments, kafkaCounters, new SystemNanoClock());
   }
 
   /**

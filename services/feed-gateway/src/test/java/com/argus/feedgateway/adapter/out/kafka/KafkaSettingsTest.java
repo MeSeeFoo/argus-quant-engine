@@ -40,15 +40,34 @@ class KafkaSettingsTest {
   @ValueSource(ints = {0, -1024, 1000})
   void rejectsABufferCapacityThatIsNotAPowerOfTwo(int capacity) {
     assertThatIllegalArgumentException()
-        .isThrownBy(() -> new KafkaProperties("t", "q", Duration.ofMillis(1), capacity))
+        .isThrownBy(() -> properties(Duration.ofMillis(1), capacity, Duration.ofSeconds(1)))
         .withMessageContaining("buffer-capacity");
   }
 
   @Test
   void rejectsANegativeIdleSleep() {
     assertThatIllegalArgumentException()
-        .isThrownBy(() -> new KafkaProperties("t", "q", Duration.ofMillis(-1), 1024))
+        .isThrownBy(() -> properties(Duration.ofMillis(-1), 1024, Duration.ofSeconds(1)))
         .withMessageContaining("sender-idle-sleep");
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {0, -1})
+  void rejectsATopOfBookIntervalThatIsNotPositive(long millis) {
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> properties(Duration.ofMillis(1), 1024, Duration.ofMillis(millis)))
+        .withMessageContaining("best-bid-ask-interval");
+  }
+
+  @Test
+  void conflatesTheTopOfBookEverySecond() throws Exception {
+    assertThat(applicationYaml().getProperty("argus.feed-gateway.kafka.best-bid-ask-interval"))
+        .isEqualTo("1s");
+  }
+
+  private static KafkaProperties properties(
+      Duration senderIdleSleep, int bufferCapacity, Duration bestBidAskInterval) {
+    return new KafkaProperties("t", "q", senderIdleSleep, bufferCapacity, bestBidAskInterval);
   }
 
   private static PropertySource<?> applicationYaml() throws Exception {
