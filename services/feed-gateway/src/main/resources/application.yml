@@ -58,3 +58,6 @@ argus:
       # Bytes of the ring buffer between the gateway agent and the Kafka sender, a power of two:
       # about ten thousand events before they are dropped
       buffer-capacity: 1048576
+      # The top of book of each instrument reaches Kafka at most this often, and only if it changed.
+      # On a monotonic clock, as it only limits the rate (ADR 0027): 1s, as for indicator values (ADR 0018)
+      best-bid-ask-interval: 1s

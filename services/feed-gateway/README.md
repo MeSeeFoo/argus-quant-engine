@@ -16,7 +16,7 @@ com.argus.feedgateway
 │   ├── in.binance           BinanceStreamClient + BinanceStreamDecoder, with their configuration
 │   ├── out                  PublicationCounters and PublicationMetrics, shared by the outbound adapters
 │   ├── out.aeron            AeronMarketDataPublisher, with its configuration
-│   └── out.kafka            KafkaMarketDataPublisher with KafkaTradeSlot (its ring's layout), KafkaBidAskSlot (for #109) and ProtobufMappers, with its configuration
+│   └── out.kafka            KafkaMarketDataPublisher with KafkaTradeSlot and KafkaBidAskSlot (its ring's layouts) and ProtobufMappers, with its configuration
 ├── config                   Instruments, the use case and the agent: nothing about Binance, Aeron or Kafka
 └── utils                    Usable from any package: AgentLifecycle (runs an agent while Spring runs), FailureLog (a throttled error log)
 ```
@@ -35,7 +35,7 @@ Binance ──WebSocket──▶ BinanceStreamClient          FeedAgent.doWork()
 
 The adapter only deals with the connection and the venue's format. Queueing, and what to do when the queue is full, belong to the application, so a different connection technology or venue does not touch them.
 
-Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/config/AgentLifecycle.java)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
+Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/utils/AgentLifecycle.java)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
 
 ## The gateway
 
@@ -107,11 +107,12 @@ Tests build synthetic frames with Binance's encoders, and run the client against
 
 ## Outbound adapter: Kafka
 
-Under construction in [#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108) (trades) and [#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109) (conflated top of book). The gateway publishes market data on the durable path too ([ADR 0027](../../docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)), as the canonical Protobuf `Trade` and `BestBidAsk` of [`argus-contracts`](../../contracts/README.md), with schemas in Apicurio ([ADR 0008](../../docs/adr/0008-apicurio-as-schema-registry-in-every-environment.md)).
+The gateway publishes market data on the durable path too ([ADR 0027](../../docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)), as the canonical Protobuf `Trade` and `BestBidAsk` of [`argus-contracts`](../../contracts/README.md), with schemas in Apicurio ([ADR 0008](../../docs/adr/0008-apicurio-as-schema-registry-in-every-environment.md)).
 
-- **Never blocks the agent** ([ADR 0005](../../docs/adr/0005-the-engine-never-blocks-on-kafka.md)). [`KafkaMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaMarketDataPublisher.java) only copies each trade into a ring buffer of its own, in the layout of [`KafkaTradeSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaTradeSlot.java): its sequence, its fields, and the instrument's id, read back from the shard's `Instruments` with its venue and symbol. When that ring is full the trade is dropped and counted. [`KafkaBidAskSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaBidAskSlot.java) is the same layout for a top of book, for the conflation of #109. A separate publisher thread drains the ring and sends to Kafka.
+- **Never blocks the agent** ([ADR 0005](../../docs/adr/0005-the-engine-never-blocks-on-kafka.md)). [`KafkaMarketDataPublisher`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaMarketDataPublisher.java) only copies each event into a ring buffer of its own, in the layout of [`KafkaTradeSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaTradeSlot.java) or [`KafkaBidAskSlot`](src/main/java/com/argus/feedgateway/adapter/out/kafka/KafkaBidAskSlot.java): its sequence, its fields, and the instrument's id, read back from the shard's `Instruments` with its venue and symbol. When that ring is full the event is dropped and counted. A separate publisher thread drains the ring and sends to Kafka.
 - **Mapping.** [`ProtobufMappers`](src/main/java/com/argus/feedgateway/adapter/out/kafka/ProtobufMappers.java) maps the events read back from the ring to the Protobuf messages, on the publisher thread. Prices and quantities are copied as they are: they are already `Decimal64` mantissas at the contract's scale. The sequence is the one of the fast path, so a consumer can match both. `aggressorSide` maps to `SIDE_BUY` or `SIDE_SELL`, never `SIDE_UNSPECIFIED`.
-- **Trades only, for now.** Every trade goes to Kafka. The top of book does not yet: it must reach `argus.market.quotes.v1` conflated, the latest per instrument at most once per interval, and that arrives with #109. Until then nothing is sent to that topic, instead of every update.
+- **Every trade, and the conflated top of book.** Every trade goes to Kafka, because candles need all of them. A top of book replaces the previous one and changes many times per millisecond, while the archive and the UI only need its recent state, so `argus.market.quotes.v1` carries the latest of each instrument at most once per interval, and only if there was an update since the last one sent. The publisher thread keeps one pre-allocated slot per instrument, and sends the ones that changed when the interval ends. Aeron still carries every update.
+- **The interval is not event time.** It only limits how often the topic is written, so it runs on a monotonic clock read by the publisher thread: venues' clocks do not affect it, and the last change still goes out when the market stops. Each message keeps its own `exchangeTimestamp`. On shutdown, whatever is waiting is sent without waiting for the interval.
 - **Topics and key.** `argus.market.trades.v1` and `argus.market.quotes.v1` ([`topics.conf`](../../infra/docker/kafka/topics.conf)), keyed by `VENUE:SYMBOL`, so each instrument stays in order within its partition.
 - **No heartbeats.** `Heartbeat` stays on the fast path: Kafka has its own liveness mechanisms.
 - **Acknowledgements and failures.** A record counts as published when Kafka acknowledges it: the adapter's `ProducerListener`, which Spring Boot plugs into its `KafkaTemplate`, counts acknowledgements and failures. A record that cannot even be handed to Kafka is counted as failed too, and the sender goes on with the next. Failures are logged at most once every 10 s, so an outage does not flood the log.
@@ -121,6 +122,7 @@ Under construction in [#108](https://github.com/MeSeeFoo/argus-quant-engine/issu
 | :--- | :--- | :--- |
 | `argus.feed-gateway.kafka.trade-topic-name` | `argus.market.trades.v1` | Topic of every `Trade` |
 | `argus.feed-gateway.kafka.best-bid-ask-topic-name` | `argus.market.quotes.v1` | Topic of the conflated `BestBidAsk` |
+| `argus.feed-gateway.kafka.best-bid-ask-interval` | `1s` | How often, at most, the top of book of each instrument reaches Kafka, and only if it changed. Measured on a monotonic clock read by the Kafka sender: it limits the rate, it is not event time |
 | `argus.feed-gateway.kafka.buffer-capacity` | `1048576` | Bytes of the ring between the gateway agent and the Kafka sender, a power of two |
 | `argus.feed-gateway.kafka.sender-idle-sleep` | `5ms` | How long the Kafka sender parks when the ring is empty: the most an event waits before it is handed to Kafka |
 | `spring.kafka.bootstrap-servers` | `${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}` | Kafka of the local environment |
