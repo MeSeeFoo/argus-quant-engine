@@ -13,21 +13,24 @@ import org.junit.jupiter.api.Test;
 
 class MarketDataRelayTest {
 
-  private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
-  private static final Instrument ETHUSDT = new Instrument("BINANCE", "ETHUSDT");
+  private static final Instruments INSTRUMENTS =
+      new Instruments(
+          List.of(new Instrument("BINANCE", "BTCUSDT"), new Instrument("BINANCE", "ETHUSDT")));
+  // As the queue passes them: from the shard's instruments, with their id
+  private static final Instrument BTCUSDT = INSTRUMENTS.get(0);
+  private static final Instrument ETHUSDT = INSTRUMENTS.get(1);
   private static final long INTERVAL = 1_000_000_000L;
 
   private final RecordingPublisher publisher = new RecordingPublisher();
   private final MarketDataCounters counters = new MarketDataCounters();
   private final MarketDataRelay relay =
-      new MarketDataRelay(
-          new Instruments(List.of(BTCUSDT, ETHUSDT)), publisher, counters, INTERVAL);
+      new MarketDataRelay(INSTRUMENTS, List.of(publisher), counters, INTERVAL);
   private final Trade trade = new Trade();
   private final BestBidAsk book = new BestBidAsk();
 
   @Test
   void publishesTrades() {
-    relay.onTrade(
+    relay.sendTrade(
         trade
             .instrument(ETHUSDT)
             .tradeId(42)
@@ -45,7 +48,7 @@ class MarketDataRelayTest {
 
   @Test
   void publishesTopOfBook() {
-    relay.onBestBidAsk(
+    relay.sendBestBidAsk(
         book.instrument(BTCUSDT)
             .bookUpdateId(7)
             .bid(6421050, -2, 120, -5)
@@ -68,10 +71,10 @@ class MarketDataRelayTest {
 
   @Test
   void dropsStaleTopOfBookUpdates() {
-    relay.onBestBidAsk(update(BTCUSDT, 7));
-    relay.onBestBidAsk(update(BTCUSDT, 7));
-    relay.onBestBidAsk(update(BTCUSDT, 6));
-    relay.onBestBidAsk(update(ETHUSDT, 6));
+    relay.sendBestBidAsk(update(BTCUSDT, 7));
+    relay.sendBestBidAsk(update(BTCUSDT, 7));
+    relay.sendBestBidAsk(update(BTCUSDT, 6));
+    relay.sendBestBidAsk(update(ETHUSDT, 6));
 
     assertThat(publisher.bestBidAsks)
         .extracting(RecordingPublisher.BestBidAsk::bookUpdateId)
@@ -87,7 +90,7 @@ class MarketDataRelayTest {
 
     assertThat(relay.heartbeatIfIdle(start, epoch)).as("idle since start").isEqualTo(1);
     assertThat(relay.heartbeatIfIdle(start + INTERVAL - 1, epoch + 1)).isZero();
-    relay.onTrade(trade.instrument(BTCUSDT).tradeId(1).price(1, 0).quantity(1, 0));
+    relay.sendTrade(trade.instrument(BTCUSDT).tradeId(1).price(1, 0).quantity(1, 0));
     assertThat(relay.heartbeatIfIdle(start + INTERVAL, epoch + 2))
         .as("a trade was published in the interval")
         .isZero();
@@ -100,10 +103,25 @@ class MarketDataRelayTest {
   }
 
   @Test
+  void numbersMessagesWithOneSequenceThatHeartbeatsRepeat() {
+    relay.heartbeatIfIdle(0, 0);
+    relay.sendTrade(trade.instrument(BTCUSDT).tradeId(1).price(1, 0).quantity(1, 0));
+    relay.sendBestBidAsk(update(ETHUSDT, 7));
+    relay.sendBestBidAsk(update(ETHUSDT, 7));
+    relay.sendTrade(trade.instrument(ETHUSDT).tradeId(2).price(1, 0).quantity(1, 0));
+    relay.heartbeatIfIdle(INTERVAL, 1); // a trade was published: no heartbeat
+    relay.heartbeatIfIdle(2 * INTERVAL, 2);
+
+    assertThat(publisher.sequences)
+        .as("nothing published yet, two trades and a top of book, the stale update unnumbered")
+        .containsExactly(0L, 1L, 2L, 3L, 3L);
+  }
+
+  @Test
   void aStaleUpdateDoesNotCountAsActivity() {
-    relay.onBestBidAsk(update(BTCUSDT, 5));
+    relay.sendBestBidAsk(update(BTCUSDT, 5));
     assertThat(relay.heartbeatIfIdle(0, 0)).as("an update was published").isZero();
-    relay.onBestBidAsk(update(BTCUSDT, 5));
+    relay.sendBestBidAsk(update(BTCUSDT, 5));
 
     assertThat(relay.heartbeatIfIdle(INTERVAL, 1)).isEqualTo(1);
   }
@@ -112,7 +130,9 @@ class MarketDataRelayTest {
   void requiresAPositiveHeartbeatInterval() {
     assertThatIllegalArgumentException()
         .isThrownBy(
-            () -> new MarketDataRelay(new Instruments(List.of(BTCUSDT)), publisher, counters, 0));
+            () ->
+                new MarketDataRelay(
+                    new Instruments(List.of(BTCUSDT)), List.of(publisher), counters, 0));
   }
 
   private BestBidAsk update(Instrument instrument, long bookUpdateId) {

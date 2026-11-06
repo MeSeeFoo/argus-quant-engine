@@ -45,8 +45,7 @@ final class TestWebSocketServer implements AutoCloseable {
     tomcat.setPort(0);
     Context context = tomcat.addContext("", null);
     // Requests reach the WebSocket upgrade filter only when some servlet is mapped
-    Tomcat.addServlet(context, "default", new HttpServlet() {});
-    context.addServletMappingDecoded("/", "default");
+    Tomcat.addServlet(context, "default", new HttpServlet() {}).addMapping("/");
     context.addServletContainerInitializer(new WsSci(), null);
     context.addServletContainerInitializer(
         (classes, servletContext) -> {

@@ -37,7 +37,7 @@ class BinanceStreamDecoderAllocationTest {
   private final MarketDataQueue queue =
       new MarketDataQueue(
           instruments,
-          new MarketDataRelay(instruments, publisher, relayCounters, 1_000_000_000L),
+          new MarketDataRelay(instruments, List.of(publisher), relayCounters, 1_000_000_000L),
           relayCounters,
           64 * 1024);
   private final BinanceStreamDecoder decoder =
@@ -115,16 +115,16 @@ class BinanceStreamDecoderAllocationTest {
     long bestBidAsks;
 
     @Override
-    public void publishTrade(com.argus.feedgateway.domain.Trade trade) {
+    public void publishTrade(com.argus.feedgateway.domain.Trade trade, long sequence) {
       trades++;
     }
 
     @Override
-    public void publishBestBidAsk(BestBidAsk bestBidAsk) {
+    public void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence) {
       bestBidAsks++;
     }
 
     @Override
-    public void publishHeartbeat(long epochNow) {}
+    public void publishHeartbeat(long epochNow, long sequence) {}
   }
 }
