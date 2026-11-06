@@ -1,8 +1,8 @@
 # 0027. The feed gateway publishes market data on both paths
 
 - **Status:** Accepted
-- **Date:** 2026-10-29
-- **Issues:** #97
+- **Date:** 2026-10-29, revised 2026-11-06 (see [Revisions](#revisions))
+- **Issues:** #97, #109
 - **Amends:** [0003](0003-dual-path-streaming.md), [0005](0005-the-engine-never-blocks-on-kafka.md), [0006](0006-archive-every-tick-and-compute-candles-on-request.md)
 
 ## Context
@@ -26,6 +26,7 @@ The two kinds of market data are not alike. A trade is an execution: each one co
   - **`argus.market.trades.v1`** carries every trade, never conflated, so candles stay exact ([0006](0006-archive-every-tick-and-compute-candles-on-request.md)).
   - **`argus.market.quotes.v1`** is **conflated**: for each instrument, the latest top-of-book is published at most once per interval, and only if it changed since the last one published. The interval is a configuration property of the gateway. This amends [0006](0006-archive-every-tick-and-compute-candles-on-request.md), which archived every top-of-book update.
   - The conflation runs in the publisher agent, off the fast path, in pre-allocated state (one slot per instrument), as for indicator values ([0018](0018-output-policy-of-the-durable-path.md)).
+  - The interval runs on a **monotonic clock read by the publisher agent**, on every duty cycle, also when there is nothing to drain. It only limits how often the topic is written: it is neither a window nor a model's "now", which stay on event time ([0017](0017-multi-instrument-models-and-event-time.md)). Every message keeps its own `exchangeTimestamp`.
 - The **model engine publishes only its outputs** to Kafka (`argus.indicators.v1`, `argus.alerts.v1`). It no longer writes to the market topics.
 - The rule of [0005](0005-the-engine-never-blocks-on-kafka.md) applies to the gateway as it does to the engine: the gateway's fast-path agent never calls Kafka. It copies each event into a pre-allocated Agrona ring buffer, and a separate publisher agent drains it into Kafka. When the buffer is full, the event is dropped for Kafka only, counted in a metric, and still published on Aeron.
 - **Only the active of a shard publishes**, on both paths. When the passive takes over, it publishes the events newer than the last ones the active published to both paths too ([0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md)).
@@ -42,6 +43,8 @@ The two kinds of market data are not alike. A trade is an execution: each one co
 - The model engine's Kafka volume no longer grows with the market feed, only with its outputs, which are already bounded ([0018](0018-output-policy-of-the-durable-path.md)).
 - The volume of `argus.market.quotes.v1` is bounded by the number of instruments and the interval, not by the activity of the market. Its consumers rarely see a full buffer, and only trades are at risk of being dropped under pressure.
 - The archive no longer holds every top-of-book update: spreads and quotes between two published ones cannot be recomputed from QuestDB. Analysis that needs them works from recorded sessions ([0024](0024-a-feed-player-for-replay-and-backtesting.md)). A shorter interval brings the archive closer to the full stream, at the cost of volume.
+- The conflation does not depend on the venues' clocks, nor on the order in which several feeds queue their events. If the market stops, the last change is still published within an interval.
+- What reaches `argus.market.quotes.v1` depends on when the publisher agent ran, so two runs over the same events can publish different updates of the same instrument. Each one is still a real update with its own `exchangeTimestamp`. Nothing depends on reproducing them: models read the fast path, which is not conflated, and a backtest does not publish to this topic.
 
 ## Alternatives considered
 
@@ -50,3 +53,14 @@ The two kinds of market data are not alike. A trade is an execution: each one co
 - **Conflate trades too.** Bounds the whole durable path, but candles would lose volume, highs and lows, and the archive could no longer explain a model's output.
 - **Every top-of-book update to Kafka.** Exact, but its volume follows the market and dominates everything else on the durable path, for data that each update makes obsolete.
 - **The archiver subscribes to Aeron directly.** Removes a hop for the archive, but the BFF and any future consumer would still need the market data on Kafka, and the archiver would lose Kafka's buffering and replay.
+- **Conflate on event time, the latest `exchangeTimestamp` drained.** The same events would always publish the same updates, but venues' clocks differ: one ahead of the others and then quiet would hold every instrument back. If the whole market stops, the last change would wait for the next event, however long that takes.
+- **Conflate on `receiveTimestamp`.** Comes from a single clock, but it still only advances with events, so a stopped market holds the last change back too.
+- **A timestamp taken when queueing, compared with the wall clock.** Also handles a stopped market, but adds a clock read per event and a field per slot on the fast path to order events that a one-second limit does not need ordered, and a wall clock stepping backwards would delay publication.
+
+## Revisions
+
+This ADR was refined in place while its first implementation (#108, #109) settled the details. See [Refining an accepted ADR](README.md#refining-an-accepted-adr).
+
+| Date | Issue | Change |
+| :--- | :--- | :--- |
+| 2026-11-06 | #109 | The conflation interval runs on a monotonic clock read by the publisher agent. Its consequences, and event time, `receiveTimestamp` and a queueing timestamp as the alternatives not taken. |

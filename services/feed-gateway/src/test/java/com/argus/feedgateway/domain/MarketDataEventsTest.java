@@ -45,6 +45,56 @@ class MarketDataEventsTest {
   }
 
   @Test
+  void copyingATopOfBookOverwritesEveryValue() {
+    BestBidAsk book =
+        new BestBidAsk()
+            .instrument(BTCUSDT)
+            .bookUpdateId(7)
+            .bid(6421050, -2, 120, -5)
+            .ask(6421051, -2, 3, -5)
+            .exchangeTimestamp(21)
+            .receiveTimestamp(22);
+    BestBidAsk copy =
+        new BestBidAsk()
+            .instrument(new Instrument("BINANCE", "ETHUSDT"))
+            .bookUpdateId(1)
+            .bid(1, 0, 1, 0)
+            .ask(1, 0, 1, 0)
+            .exchangeTimestamp(1)
+            .receiveTimestamp(1);
+
+    assertThat(copy.copyFrom(book)).isSameAs(copy);
+
+    assertThat(copy.instrument()).isSameAs(BTCUSDT);
+    assertThat(copy.bookUpdateId()).isEqualTo(7);
+    assertThat(copy.bidPrice()).isEqualTo(book.bidPrice());
+    assertThat(copy.bidQuantity()).isEqualTo(book.bidQuantity());
+    assertThat(copy.askPrice()).isEqualTo(book.askPrice());
+    assertThat(copy.askQuantity()).isEqualTo(book.askQuantity());
+    assertThat(copy.exchangeTimestamp()).isEqualTo(21);
+    assertThat(copy.receiveTimestamp()).isEqualTo(22);
+  }
+
+  @Test
+  void aCopiedTopOfBookDoesNotChangeWithTheOriginal() {
+    BestBidAsk book = new BestBidAsk().instrument(BTCUSDT).bookUpdateId(7).bid(1, 0, 1, 0);
+
+    BestBidAsk copy = new BestBidAsk().copyFrom(book);
+    book.instrument(new Instrument("BINANCE", "ETHUSDT")).bookUpdateId(8).bid(2, 0, 2, 0);
+
+    assertThat(copy.instrument()).isEqualTo(BTCUSDT);
+    assertThat(copy.bookUpdateId()).isEqualTo(7);
+    assertThat(copy.bidPrice()).isEqualTo(new BestBidAsk().bid(1, 0, 1, 0).bidPrice());
+  }
+
+  @Test
+  void aCopyOfATopOfBookWithoutInstrumentHasNoneEither() {
+    BestBidAsk copy = new BestBidAsk().instrument(BTCUSDT).copyFrom(new BestBidAsk());
+
+    assertThatNullPointerException().isThrownBy(copy::instrument);
+  }
+
+  @Test
   void anEventWithoutInstrumentFailsFast() {
     assertThatNullPointerException().isThrownBy(() -> new Trade().instrument());
     assertThatNullPointerException().isThrownBy(() -> new BestBidAsk().instrument());

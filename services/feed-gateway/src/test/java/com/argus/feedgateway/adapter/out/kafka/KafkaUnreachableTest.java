@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import org.agrona.concurrent.AgentRunner;
 import org.agrona.concurrent.SleepingIdleStrategy;
+import org.agrona.concurrent.SystemNanoClock;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -54,9 +55,11 @@ class KafkaUnreachableTest {
         new KafkaMarketDataPublisher(
             template,
             // A small ring, so it fills while the sender is stuck
-            new KafkaProperties("trades", "quotes", Duration.ofMillis(1), 4 * 1024),
+            new KafkaProperties(
+                "trades", "quotes", Duration.ofMillis(1), 4 * 1024, Duration.ofSeconds(1)),
             instruments,
-            counters);
+            counters,
+            new SystemNanoClock());
     var fastPath = new RecordingPublisher();
     var relay =
         new MarketDataRelay(
