@@ -112,7 +112,7 @@ services:
       start_period: 10s
 
   apicurio:
-    image: apicurio/apicurio-registry:3.3.3
+    image: apicurio/apicurio-registry:3.3.4
     ports:
       - "${APICURIO_PORT:?set in .env}:8080"
     environment:
@@ -135,7 +135,7 @@ services:
       start_period: 20s
 
   apicurio-ui:
-    image: apicurio/apicurio-registry-ui:3.3.3
+    image: apicurio/apicurio-registry-ui:3.3.4
     ports:
       - "${APICURIO_UI_PORT}:8080"
     environment:

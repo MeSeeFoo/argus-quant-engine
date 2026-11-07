@@ -57,7 +57,7 @@ class KafkaRoundTripTest {
 
   @Container
   private static final GenericContainer<?> APICURIO =
-      new GenericContainer<>("apicurio/apicurio-registry:3.3.3")
+      new GenericContainer<>("apicurio/apicurio-registry:3.3.4")
           .withExposedPorts(8080)
           .waitingFor(Wait.forHttp("/apis/registry/v3/system/info").forStatusCode(200));
 
