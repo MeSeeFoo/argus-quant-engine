@@ -57,7 +57,7 @@
         <sbe.version>1.41.0</sbe.version>
         <protobuf.version>4.36.2</protobuf.version>
         <!-- Same version as the registry in infra/docker (ADR 0008) -->
-        <apicurio-registry.version>3.3.3</apicurio-registry.version>
+        <apicurio-registry.version>3.3.4</apicurio-registry.version>
         <junit.version>6.1.3</junit.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.5.1</archunit.version>
@@ -67,6 +67,10 @@
         <lz4-java.version>1.12.1</lz4-java.version>
         <!-- Same for snappy-java (GHSA-gwq9-9ffj-mvrv and others). Remove once Kafka ships 1.1.10.9 or newer. -->
         <snappy-java.version>1.1.10.12</snappy-java.version>
+        <!-- Same for Guava, brought by Apicurio through Wire (GHSA-xxph-c9ww-hj94). Remove once Apicurio ships 33.7.2 or newer. -->
+        <guava.version>33.7.2-jre</guava.version>
+        <!-- Overrides the version managed by Spring Boot (GHSA-ccrj-gw8r-854m). Remove once Spring Boot manages 1.67.0 or newer. -->
+        <opentelemetry.version>1.68.0</opentelemetry.version>
 
         <!-- Plugins -->
         <maven-enforcer-plugin.version>3.7.0</maven-enforcer-plugin.version>
@@ -90,8 +94,8 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Imported BOMs: the first declaration wins, so JUnit and Testcontainers
-                 go before Spring Boot to override the versions it manages. -->
+            <!-- Imported BOMs: the first declaration wins, so JUnit, Testcontainers and
+                 OpenTelemetry go before Spring Boot to override the versions it manages. -->
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
@@ -103,6 +107,13 @@
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -160,7 +171,7 @@
                 <version>${apicurio-registry.version}</version>
             </dependency>
 
-            <!-- Security overrides, see lz4-java.version and snappy-java.version -->
+            <!-- Security overrides, see lz4-java.version, snappy-java.version and guava.version -->
             <dependency>
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
@@ -170,6 +181,11 @@
                 <groupId>org.xerial.snappy</groupId>
                 <artifactId>snappy-java</artifactId>
                 <version>${snappy-java.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
             </dependency>
 
             <!-- Nullness annotations (@Nullable) checked by NullAway -->
