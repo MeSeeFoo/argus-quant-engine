@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: argus-model-engine
+
+server:
+  # 8080 is Apicurio in the local environment (infra/docker) and 8081 the feed gateway
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, metrics
