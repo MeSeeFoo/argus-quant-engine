@@ -115,10 +115,51 @@ A task is done when:
 - [ ] Every acceptance criterion of the issue is met, and its boxes are ticked.
 - [ ] `./mvnw verify` passes locally: build, tests, formatting, static analysis and coverage thresholds.
 - [ ] New behaviour is covered by tests; bugs get a test that fails without the fix.
-- [ ] Documentation reflects the change: README, `docs/`, module READMEs and comments where behaviour changed.
+- [ ] Documentation reflects the change: README, `docs/`, module READMEs and [comments](#code-comments) where behaviour changed.
 - [ ] Significant design decisions are recorded as an ADR in [`docs/adr`](docs/adr/README.md).
 - [ ] No `TODO` without an issue number.
 - [ ] The pull request is merged with every required check green, the issue is closed and the branch is deleted.
+
+## Code comments
+
+Comments in this engine carry facts the compiler cannot check, and those facts prevent real bugs.
+
+### What gets a Javadoc
+
+| Element | Comment? |
+| :--- | :--- |
+| Every class, interface, record and enum | Yes |
+| Public and protected methods and constructors | Yes |
+| Public constants and enum constants | Yes |
+| Private methods | Yes |
+| Public fields | Yes |
+| Private fields | Only when the why isn't obvious |
+| `@Override`, trivial accessors, record accessors | No, it would only add text like `/** Returns the price. */` |
+| Tests | Only unusual setups |
+
+### What a comment must state, where it applies
+
+These matter more than extra tags:
+
+- **Units:** nanos or millis, and scaled values (`Decimal64` mantissas).
+- **Clock:** event time, monotonic or wall clock.
+- **Threading:** which thread calls it, and whether it is thread-safe.
+- **Allocation:** whether it is on the hot path and allocation-free.
+- **Lifetime:** for reused objects and flyweights, how long a value stays valid.
+- **Decisions:** the ADR behind them.
+
+### Tags
+
+- `@param`, `@return` and `@throws` always, as block tags: Checkstyle does not recognise the inline `{@return}`.
+- `{@link}` and `@see` where they help.
+- No `@since` or `@version`: git and release-please track them.
+- No `@implNote`: threading, allocation and lifetime are part of a method's contract with its callers, so they go in the description, and no custom Javadoc tag configuration is needed.
+
+### What the build checks
+
+`./mvnw verify` fails on a missing Javadoc or tag ([`checkstyle.xml`](checkstyle.xml)), and on a broken `{@link}` or a `@param` with the wrong name (`-Xdoclint`). Tests and generated code are not checked. A *trivial accessor* is, to the build, a method that only returns the field of its name, or a fluent setter that only assigns it and returns `this`; `getX` and `isX` getters count too. Anything else needs a Javadoc.
+
+The build cannot tell whether a comment is true, or whether it states the facts above. That is for review: the [reviewer agent](.claude/agents/reviewer.md) flags wrong or stale comments. Private fields are left to judgement for the same reason.
 
 ## Editor and formatting
 
