@@ -34,6 +34,10 @@
             <groupId>org.agrona</groupId>
             <artifactId>agrona</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.argus</groupId>
+            <artifactId>argus-agent-lifecycle</artifactId>
+        </dependency>
         <!-- Fast path: canonical SBE messages over Aeron, with an embedded Media Driver (ADR 0021) -->
         <dependency>
             <groupId>com.argus</groupId>

@@ -1,4 +1,4 @@
-package com.argus.feedgateway.utils;
+package com.argus.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

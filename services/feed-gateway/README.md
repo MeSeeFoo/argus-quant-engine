@@ -18,7 +18,7 @@ com.argus.feedgateway
 │   ├── out.aeron            AeronMarketDataPublisher, with its configuration
 │   └── out.kafka            KafkaMarketDataPublisher with KafkaTradeSlot and KafkaBidAskSlot (its ring's layouts) and ProtobufMappers, with its configuration
 ├── config                   Instruments, the use case and the agent: nothing about Binance, Aeron or Kafka
-└── utils                    Usable from any package: AgentLifecycle (runs an agent while Spring runs), FailureLog (a throttled error log)
+└── utils                    Usable from any package: FailureLog (a throttled error log)
 ```
 
 A frame's journey. The adapter decodes on the connection's thread and hands the events over; from the queue on, everything runs on the gateway agent's thread:
@@ -35,7 +35,7 @@ Binance ──WebSocket──▶ BinanceStreamClient          FeedAgent.doWork()
 
 The adapter only deals with the connection and the venue's format. Queueing, and what to do when the queue is full, belong to the application, so a different connection technology or venue does not touch them.
 
-Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`AgentLifecycle`](src/main/java/com/argus/feedgateway/utils/AgentLifecycle.java)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
+Spring builds the objects and starts the agent on its own thread through an Agrona `AgentRunner` ([`argus-agent-lifecycle`](../../libs/agent-lifecycle/README.md)); it is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)). Each adapter owns its properties and its Spring configuration; `config` only sees the ports.
 
 ## The gateway
 

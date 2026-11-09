@@ -2,7 +2,7 @@ package com.argus.feedgateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.argus.feedgateway.utils.AgentLifecycle;
+import com.argus.agent.AgentLifecycle;
 import com.google.protobuf.Message;
 import java.net.URI;
 import java.net.http.HttpClient;

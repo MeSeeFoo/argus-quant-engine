@@ -16,5 +16,6 @@
 
     <modules>
         <module>architecture-rules</module>
+        <module>agent-lifecycle</module>
     </modules>
 </project>

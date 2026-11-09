@@ -1,8 +1,8 @@
 package com.argus.feedgateway.adapter.out.kafka;
 
+import com.argus.agent.AgentLifecycle;
 import com.argus.feedgateway.adapter.out.PublicationMetrics;
 import com.argus.feedgateway.domain.Instruments;
-import com.argus.feedgateway.utils.AgentLifecycle;
 import com.google.protobuf.Message;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import org.agrona.concurrent.SleepingIdleStrategy;

@@ -110,6 +110,7 @@ Model state (models, deployments, the instrument catalogue, the PANIC state) is 
 | **`argus-quant-lab`** | Research environment | Python (CPython), Jupyter, pandas, NumPy, SciPy | Offline research on the data stored in QuestDB: analysis, backtesting and model calibration. Sends calibrated parameters to deployments through the BFF. |
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
 | **`argus-architecture-rules`** | Library | ArchUnit | The hexagonal architecture rules, applied by every service with a single test class. |
+| **`argus-agent-lifecycle`** | Library | Agrona, Spring | Runs an Agrona agent on its own thread while the Spring context runs, in the services built on agents. |
 
 ---
 
@@ -318,6 +319,7 @@ argus-quant-engine/
 ├── contracts/              # argus-contracts: SBE + Protobuf schemas
 ├── libs/
 │   ├── architecture-rules/ # argus-architecture-rules (ArchUnit rules for every service)
+│   ├── agent-lifecycle/    # argus-agent-lifecycle (runs Agrona agents under Spring)
 │   ├── model-runtime/      # argus-model-runtime (GraalPy sandbox + the argus Python SDK)
 │   └── builtin-models/     # argus-builtin-models (Java indicators)
 ├── services/

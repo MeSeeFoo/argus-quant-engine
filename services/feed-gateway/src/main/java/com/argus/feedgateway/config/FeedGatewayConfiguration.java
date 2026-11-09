@@ -1,5 +1,6 @@
 package com.argus.feedgateway.config;
 
+import com.argus.agent.AgentLifecycle;
 import com.argus.feedgateway.application.FeedAgent;
 import com.argus.feedgateway.application.MarketDataCounters;
 import com.argus.feedgateway.application.MarketDataQueue;
@@ -7,7 +8,6 @@ import com.argus.feedgateway.application.MarketDataRelay;
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.Instrument;
 import com.argus.feedgateway.domain.Instruments;
-import com.argus.feedgateway.utils.AgentLifecycle;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import java.util.List;
