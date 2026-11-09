@@ -75,7 +75,7 @@ public final class AeronCounters extends PublicationCounters {
     droppedBackPressured.incrementAndGet();
   }
 
-  /** Counts a message dropped on a closed publication. Allocation-free. */
+  /** Counts a message dropped on a closed publication, or one at its limit. Allocation-free. */
   void countDroppedClosed() {
     droppedClosed.incrementAndGet();
   }

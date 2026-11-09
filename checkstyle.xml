@@ -29,7 +29,7 @@
         </module>
 
         <!-- A record-style trivial accessor: no parameters, and the body only returns the field
-             of the same name. allowMissingPropertyJavadoc above only knows getX and isX. -->
+             of the same name. allowMissingPropertyJavadoc above only knows getX, isX and setX. -->
         <module name="SuppressionXpathSingleFilter">
             <property name="id" value="MissingJavadocMethodOrAccessor"/>
             <property name="query" value="//METHOD_DEF[not(PARAMETERS/PARAMETER_DEF) and count(SLIST/LITERAL_RETURN) = 1 and count(SLIST/*) = 2 and SLIST/LITERAL_RETURN/EXPR/IDENT/@text = IDENT/@text]"/>

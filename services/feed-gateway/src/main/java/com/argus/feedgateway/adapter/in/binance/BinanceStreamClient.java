@@ -124,7 +124,8 @@ public final class BinanceStreamClient implements AutoCloseable {
   /**
    * The current connection attempt. Thread-safe.
    *
-   * @return a future completed when the connection is open
+   * @return a future completed when the connection is open, or exceptionally if the attempt failed
+   *     or {@link #connect} has not been called
    */
   public synchronized CompletableFuture<WebSocket> connection() {
     return connection;
@@ -211,8 +212,8 @@ public final class BinanceStreamClient implements AutoCloseable {
     }
 
     /**
-     * Decodes one complete frame, on the connection's thread. {@code frame} is only valid during
-     * this call.
+     * Decodes one complete frame, on the HTTP client's threads, one call at a time. {@code frame}
+     * is only valid during this call.
      *
      * @param frame the buffer holding the frame, from offset 0
      * @param length the length of the frame in bytes

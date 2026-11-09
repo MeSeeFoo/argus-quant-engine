@@ -157,7 +157,7 @@ These matter more than extra tags:
 
 ### What the build checks
 
-`./mvnw verify` fails on a missing Javadoc or tag ([`checkstyle.xml`](checkstyle.xml)), and on a broken `{@link}` or a `@param` with the wrong name (`-Xdoclint`). Tests and generated code are not checked. A *trivial accessor* is, to the build, a method that only returns the field of its name, or a fluent setter that only assigns it and returns `this`; `getX` and `isX` getters count too. Anything else needs a Javadoc.
+`./mvnw verify` fails on a missing Javadoc or tag ([`checkstyle.xml`](checkstyle.xml)), and on a broken `{@link}` or a `@param` with the wrong name (`-Xdoclint`). Checkstyle skips tests and generated code; `-Xdoclint` skips only generated code. A *trivial accessor* is, to the build, a method that only returns the field of its name, or a fluent setter that only assigns it and returns `this`; simple `getX`, `isX` and `setX` methods count too. Anything else needs a Javadoc.
 
 The build cannot tell whether a comment is true, or whether it states the facts above. That is for review: the [reviewer agent](.claude/agents/reviewer.md) flags wrong or stale comments. Private fields are left to judgement for the same reason.
 

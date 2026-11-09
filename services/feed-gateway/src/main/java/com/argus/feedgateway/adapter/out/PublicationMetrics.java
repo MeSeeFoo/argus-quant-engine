@@ -11,10 +11,10 @@ import java.util.function.ToDoubleFunction;
  */
 public final class PublicationMetrics {
 
-  /** Name of the counter of messages handed to a transport. */
+  /** Name of the counter of messages a transport accepted. */
   public static final String PUBLISHED = "argus.feed.messages.published";
 
-  /** Name of the counter of messages dropped instead of blocking. */
+  /** Name of the counter of messages a transport did not deliver; the reason tag says why. */
   public static final String DROPPED = "argus.feed.messages.dropped";
 
   private PublicationMetrics() {}

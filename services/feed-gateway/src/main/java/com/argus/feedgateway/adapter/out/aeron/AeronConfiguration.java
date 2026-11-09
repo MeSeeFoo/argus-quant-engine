@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * The Aeron adapter: an embedded Media Driver, the Aeron client, the shard's publication (ADR 0021)
+ * The Aeron adapter: an embedded Media Driver, the Aeron client, the shard's publication (ADR 0022)
  * and the {@link MarketDataPublisher} on top of it, with its metrics. It owns its properties
  * ({@code argus.feed-gateway.aeron.*}); the rest of the gateway only sees the port. Beans are
  * closed in reverse order on shutdown: publication, client, driver.
@@ -52,7 +52,7 @@ class AeronConfiguration {
   }
 
   /**
-   * The shard's publication (ADR 0021). Exclusive: only one thread may offer to it.
+   * The shard's publication (ADR 0022). Exclusive: only one thread may offer to it.
    *
    * @param aeron the Aeron client
    * @param properties the adapter's properties

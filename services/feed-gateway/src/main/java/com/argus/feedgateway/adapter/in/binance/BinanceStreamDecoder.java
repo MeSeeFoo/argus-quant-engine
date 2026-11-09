@@ -55,9 +55,9 @@ public final class BinanceStreamDecoder {
   }
 
   /**
-   * Decodes one frame, on the connection's thread. Allocation-free. The events handed to the
-   * gateway are the reused {@link Trade} and {@link BestBidAsk}, valid only during the call to the
-   * port.
+   * Decodes one frame, on the HTTP client's threads, one call at a time. Allocation-free. The
+   * events handed to the gateway are the reused {@link Trade} and {@link BestBidAsk}, valid only
+   * during the call to the port.
    *
    * @param buffer the buffer holding the frame; only read during this call
    * @param offset where the frame starts in {@code buffer}
