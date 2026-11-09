@@ -9,8 +9,8 @@ import org.slf4j.Logger;
  * transport is down every attempt fails, and logging each one would flood the log. The adapter
  * counts every failure in its metrics, and each line logged says how many there were so far.
  *
- * <p>Safe from any thread. It measures the interval with the system clock: it times the log only,
- * never events.
+ * <p>Safe from any thread. It measures the interval with the monotonic clock: it times the log
+ * only, never events.
  */
 public final class FailureLog {
 
@@ -19,7 +19,13 @@ public final class FailureLog {
   private final String interval;
   private final AtomicLong nextLogNanos;
 
-  /** Logs to {@code logger}, the adapter's own, at most once every {@code interval}. */
+  /**
+   * Logs to {@code logger}, the adapter's own, at most once every {@code interval}.
+   *
+   * @param logger the adapter's logger
+   * @param interval the shortest time between two lines
+   * @throws IllegalArgumentException if {@code interval} is negative
+   */
   public FailureLog(Logger logger, Duration interval) {
     if (interval.isNegative()) {
       throw new IllegalArgumentException("interval must not be negative");
@@ -36,6 +42,7 @@ public final class FailureLog {
    *
    * @param what what failed, in a few words
    * @param failedSoFar the adapter's count of these failures, this one included
+   * @param failure the failure
    * @return whether it was logged
    */
   public boolean log(String what, long failedSoFar, Exception failure) {

@@ -36,6 +36,15 @@ public final class MarketDataRelay {
   // Of the last message published, shared by every transport so they all number it the same
   private long sequence;
 
+  /**
+   * Creates the relay.
+   *
+   * @param instruments the shard's instruments
+   * @param publishers every outbound transport; at least one
+   * @param counters the gateway's counters
+   * @param heartbeatIntervalNanos the heartbeat interval in nanoseconds, positive
+   * @throws IllegalArgumentException if there is no publisher or the interval is not positive
+   */
   public MarketDataRelay(
       Instruments instruments,
       List<MarketDataPublisher> publishers,
@@ -54,7 +63,11 @@ public final class MarketDataRelay {
     this.heartbeatIntervalNanos = heartbeatIntervalNanos;
   }
 
-  /** Publishes a trade of one of the gateway's instruments. */
+  /**
+   * Publishes a trade of one of the gateway's instruments.
+   *
+   * @param trade the trade; reused by the caller, only read during this call
+   */
   public void sendTrade(Trade trade) {
     final long tradeSequence = ++sequence;
     for (MarketDataPublisher publisher : publishers) {
@@ -63,7 +76,11 @@ public final class MarketDataRelay {
     publishedSinceLastCheck = true;
   }
 
-  /** Publishes a top-of-book update of one of the gateway's instruments, unless it is stale. */
+  /**
+   * Publishes a top-of-book update of one of the gateway's instruments, unless it is stale.
+   *
+   * @param bestBidAsk the update; reused by the caller, only read during this call
+   */
   public void sendBestBidAsk(BestBidAsk bestBidAsk) {
     if (!bookUpdates.accept(bestBidAsk.instrument().id(), bestBidAsk.bookUpdateId())) {
       counters.staleBookUpdate();

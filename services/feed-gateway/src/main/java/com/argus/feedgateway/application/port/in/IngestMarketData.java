@@ -14,9 +14,17 @@ import com.argus.feedgateway.domain.Trade;
  */
 public interface IngestMarketData {
 
-  /** Queues a trade, or drops and counts it if the queue is full. */
+  /**
+   * Queues a trade, or drops and counts it if the queue is full.
+   *
+   * @param trade the trade; reused by the caller, only read during this call
+   */
   void onTrade(Trade trade);
 
-  /** Queues a top-of-book update, or drops and counts it if the queue is full. */
+  /**
+   * Queues a top-of-book update, or drops and counts it if the queue is full.
+   *
+   * @param bestBidAsk the update; reused by the caller, only read during this call
+   */
   void onBestBidAsk(BestBidAsk bestBidAsk);
 }

@@ -21,6 +21,12 @@ public final class Trade {
   private long receiveTimestamp;
   private AggressorSide aggressorSide = AggressorSide.BUY;
 
+  /**
+   * The traded instrument.
+   *
+   * @return the instrument, never {@code null}
+   * @throws NullPointerException if none has been set yet
+   */
   public Instrument instrument() {
     return Objects.requireNonNull(instrument, "instrument not set");
   }
@@ -39,29 +45,53 @@ public final class Trade {
     return this;
   }
 
-  /** The price as a {@code Decimal64} mantissa, or {@link Decimal64#NOT_REPRESENTABLE}. */
+  /**
+   * The price of the trade.
+   *
+   * @return a {@code Decimal64} mantissa (scale 10⁻⁸), or {@link Decimal64#NOT_REPRESENTABLE}
+   */
   public long price() {
     return price;
   }
 
-  /** Sets the price from the venue's decimal: {@code mantissa × 10^exponent}. */
+  /**
+   * Sets the price from the venue's decimal: {@code mantissa × 10^exponent}.
+   *
+   * @param mantissa the venue's mantissa
+   * @param exponent the venue's exponent
+   * @return this trade
+   */
   public Trade price(long mantissa, int exponent) {
     price = Decimal64.fromDecimal(mantissa, exponent);
     return this;
   }
 
-  /** The quantity as a {@code Decimal64} mantissa, or {@link Decimal64#NOT_REPRESENTABLE}. */
+  /**
+   * The quantity of the trade.
+   *
+   * @return a {@code Decimal64} mantissa (scale 10⁻⁸), or {@link Decimal64#NOT_REPRESENTABLE}
+   */
   public long quantity() {
     return quantity;
   }
 
-  /** Sets the quantity from the venue's decimal: {@code mantissa × 10^exponent}. */
+  /**
+   * Sets the quantity from the venue's decimal: {@code mantissa × 10^exponent}.
+   *
+   * @param mantissa the venue's mantissa
+   * @param exponent the venue's exponent
+   * @return this trade
+   */
   public Trade quantity(long mantissa, int exponent) {
     quantity = Decimal64.fromDecimal(mantissa, exponent);
     return this;
   }
 
-  /** Execution time on the venue, epoch nanoseconds. */
+  /**
+   * Execution time on the venue: the event time of this trade.
+   *
+   * @return epoch nanoseconds
+   */
   public long exchangeTimestamp() {
     return exchangeTimestamp;
   }
@@ -71,7 +101,11 @@ public final class Trade {
     return this;
   }
 
-  /** Time the gateway received it, epoch nanoseconds. */
+  /**
+   * Time the gateway received it, on the wall clock. Only for measuring latency, never for windows.
+   *
+   * @return epoch nanoseconds
+   */
   public long receiveTimestamp() {
     return receiveTimestamp;
   }
@@ -92,6 +126,8 @@ public final class Trade {
 
   /**
    * Whether price and quantity fit {@code Decimal64} exactly; a trade that does not is rejected.
+   *
+   * @return {@code true} if both are representable
    */
   public boolean isRepresentable() {
     return price != Decimal64.NOT_REPRESENTABLE && quantity != Decimal64.NOT_REPRESENTABLE;

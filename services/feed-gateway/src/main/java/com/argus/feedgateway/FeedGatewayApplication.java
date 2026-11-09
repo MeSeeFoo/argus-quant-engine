@@ -7,6 +7,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class FeedGatewayApplication {
 
+  /**
+   * Starts the gateway.
+   *
+   * @param args Spring Boot's command-line arguments
+   */
   public static void main(String[] args) {
     SpringApplication.run(FeedGatewayApplication.class, args);
   }

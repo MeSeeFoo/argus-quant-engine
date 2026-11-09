@@ -19,6 +19,14 @@ public final class FeedAgent implements Agent {
   private final NanoClock monotonicClock;
   private final EpochNanoClock epochClock;
 
+  /**
+   * Creates the agent.
+   *
+   * @param queue what it drains
+   * @param relay where the events go
+   * @param monotonicClock a monotonic clock in nanoseconds, schedules the heartbeats
+   * @param epochClock the wall clock in epoch nanoseconds, written in the heartbeats
+   */
   public FeedAgent(
       MarketDataQueue queue,
       MarketDataRelay relay,

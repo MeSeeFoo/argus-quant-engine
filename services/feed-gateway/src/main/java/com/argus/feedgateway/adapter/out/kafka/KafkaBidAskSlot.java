@@ -33,7 +33,13 @@ final class KafkaBidAskSlot {
 
   /**
    * Writes {@code book}, published with {@code sequence}, at {@code index}. Its instrument must
-   * come from the shard's {@link Instruments}, as the relay's do.
+   * come from the shard's {@link Instruments}, as the relay's do. On the gateway agent's thread;
+   * allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the claimed slot starts
+   * @param sequence the sequence it was published with
+   * @param book the values to copy; only read during this call
    */
   static void write(MutableDirectBuffer buffer, int index, long sequence, BestBidAsk book) {
     buffer.putLong(index + SEQUENCE, sequence);
@@ -47,7 +53,15 @@ final class KafkaBidAskSlot {
     buffer.putInt(index + INSTRUMENT, book.instrument().id());
   }
 
-  /** Fills {@code book} with the slot at {@code index}; its sequence is the slot's first long. */
+  /**
+   * Fills {@code book} with the slot at {@code index}; its sequence is the slot's first long. On
+   * the publisher thread; allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the slot starts
+   * @param instruments the shard's instruments, to read the instrument back
+   * @param book the reused instance to fill
+   */
   static void read(DirectBuffer buffer, int index, Instruments instruments, BestBidAsk book) {
     book.instrument(instruments.get(buffer.getInt(index + INSTRUMENT)))
         .bookUpdateId(buffer.getLong(index + BOOK_UPDATE_ID))

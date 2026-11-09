@@ -7,7 +7,7 @@ This file is the entry point. Details live in the documents it links to: read th
 ## Build and test
 
 ```bash
-./mvnw verify            # build, tests, formatting, Error Prone + NullAway, JaCoCo thresholds
+./mvnw verify            # build, tests, formatting, Error Prone + NullAway, Javadoc, JaCoCo thresholds
 ./mvnw spotless:apply    # format Java code (google-java-format); verify fails on unformatted code
 ```
 
@@ -79,4 +79,4 @@ The [ADRs](docs/adr/README.md) are the source of truth for design. Read the rele
 
 ## Workflow
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) defines issues, branch names, Conventional Commits, pull requests, merging and the Definition of Done, and CI enforces most of it. Follow it as written. In short: every change comes from an issue and reaches `main` through a pull request; existing commits are never rewritten.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) defines issues, branch names, Conventional Commits, pull requests, merging, the Definition of Done and [what code comments must say](CONTRIBUTING.md#code-comments), and CI enforces most of it. Follow it as written. In short: every change comes from an issue and reaches `main` through a pull request; existing commits are never rewritten.

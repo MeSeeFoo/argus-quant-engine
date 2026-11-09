@@ -90,6 +90,8 @@
         <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
         <!-- 1.37.0 is not yet supported by Spotless 3.10.x -->
         <google-java-format.version>1.36.1</google-java-format.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <checkstyle.version>14.4.0</checkstyle.version>
     </properties>
 
     <dependencyManagement>
@@ -223,6 +225,10 @@
                         <!-- Error Prone runs inside javac; it needs the flags in .mvn/jvm.config. -->
                         <compilerArgs>
                             <arg>-Werror</arg>
+                            <!-- Broken {@link}s, wrong @param names and invalid HTML in Javadoc fail the
+                                 build. Missing comments are Checkstyle's job; generated code has its own. -->
+                            <arg>-Xdoclint:all/private,-missing</arg>
+                            <arg>-Xdoclint/package:-com.argus.contracts.*,-com.argus.feedgateway.adapter.in.binance.sbe</arg>
                             <arg>-XDcompilePolicy=simple</arg>
                             <arg>--should-stop=ifError=FLOW</arg>
                             <!-- Every warning fails the build. Generated sources are not checked.
@@ -299,6 +305,19 @@
                     <version>${spotless-maven-plugin.version}</version>
                 </plugin>
                 <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven-checkstyle-plugin.version}</version>
+                    <dependencies>
+                        <!-- The plugin bundles an old Checkstyle that cannot parse Java 25. -->
+                        <dependency>
+                            <groupId>com.puppycrawl.tools</groupId>
+                            <artifactId>checkstyle</artifactId>
+                            <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+                <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco-maven-plugin.version}</version>
@@ -364,6 +383,30 @@
                     <execution>
                         <id>spotless-check</id>
                         <!-- Bound to verify by default: ./mvnw verify fails on unformatted code. -->
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <configLocation>${maven.multiModuleProjectDirectory}/checkstyle.xml</configLocation>
+                    <!-- Hand-written production code only: this leaves out tests and
+                         target/generated-sources, which compileSourceRoots would include. -->
+                    <sourceDirectories>
+                        <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+                    </sourceDirectories>
+                    <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                    <consoleOutput>true</consoleOutput>
+                    <violationSeverity>warning</violationSeverity>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle-check</id>
+                        <!-- Bound to verify by default: ./mvnw verify fails on a missing comment. -->
                         <goals>
                             <goal>check</goal>
                         </goals>

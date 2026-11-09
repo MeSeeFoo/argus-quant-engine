@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!-- Enforces the mechanical part of the comment rule in CONTRIBUTING.md (see "Code comments").
+     Runs on src/main/java only, so tests and generated code are never checked (root pom.xml). -->
+<module name="Checker">
+    <property name="severity" value="error"/>
+
+    <module name="TreeWalker">
+        <!-- Every class, interface, record, enum and annotation, nested and private ones included. -->
+        <module name="MissingJavadocType">
+            <property name="scope" value="private"/>
+        </module>
+
+        <!-- Every method of any visibility. @Override is exempt by default in allowedAnnotations. -->
+        <module name="MissingJavadocMethod">
+            <property name="id" value="MissingJavadocMethodOrAccessor"/>
+            <property name="scope" value="private"/>
+            <property name="allowMissingPropertyJavadoc" value="true"/>
+            <property name="tokens" value="METHOD_DEF, ANNOTATION_FIELD_DEF"/>
+        </module>
+
+        <!-- Constructors, except private ones: those only forbid instantiation or serve a factory. -->
+        <module name="MissingJavadocMethod">
+            <property name="scope" value="package"/>
+            <property name="tokens" value="CTOR_DEF, COMPACT_CTOR_DEF"/>
+        </module>
+
+        <!-- A record-style trivial accessor: no parameters, and the body only returns the field
+             of the same name. allowMissingPropertyJavadoc above only knows getX, isX and setX. -->
+        <module name="SuppressionXpathSingleFilter">
+            <property name="id" value="MissingJavadocMethodOrAccessor"/>
+            <property name="query" value="//METHOD_DEF[not(PARAMETERS/PARAMETER_DEF) and count(SLIST/LITERAL_RETURN) = 1 and count(SLIST/*) = 2 and SLIST/LITERAL_RETURN/EXPR/IDENT/@text = IDENT/@text]"/>
+        </module>
+
+        <!-- A trivial fluent setter: one parameter, assigns the field of the same name, returns this. -->
+        <module name="SuppressionXpathSingleFilter">
+            <property name="id" value="MissingJavadocMethodOrAccessor"/>
+            <property name="query" value="//METHOD_DEF[count(PARAMETERS/PARAMETER_DEF) = 1 and count(SLIST/*) = 4 and SLIST/EXPR/ASSIGN/IDENT[1]/@text = IDENT/@text and SLIST/LITERAL_RETURN/EXPR/LITERAL_THIS]"/>
+        </module>
+
+        <!-- Public constants and public fields, interface constants and enum constants included. -->
+        <module name="JavadocVariable">
+            <property name="accessModifiers" value="public"/>
+        </module>
+
+        <!-- When a Javadoc exists its tags must be complete: @param, @return, @throws. -->
+        <module name="JavadocMethod">
+            <property name="accessModifiers" value="public, protected, package, private"/>
+            <property name="validateThrows" value="true"/>
+        </module>
+        <module name="JavadocType">
+            <property name="scope" value="private"/>
+        </module>
+    </module>
+</module>

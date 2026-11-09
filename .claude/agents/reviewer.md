@@ -54,9 +54,18 @@ Each rule names its source. When a rule and a document disagree, the document wi
 - D3. Definition of Done: new behaviour covered by tests and bugs by a test that fails without the fix; documentation (README, `docs/`, module READMEs, `CLAUDE.md` where relevant) reflects the change; significant design decisions recorded as an ADR; no `TODO` without an issue number; repository text in English.
 - D4. Rules from `CLAUDE.md`: every JVM that loads Agrona passes `--add-exports java.base/jdk.internal.misc=ALL-UNNAMED`; `.claude/settings.json` deny rules and hooks are not weakened without a reason in the pull request.
 
+### E. Comments ([CONTRIBUTING.md](../../CONTRIBUTING.md#code-comments))
+
+Check every comment the diff adds or changes, and every comment on code the diff changes, against the code it describes. A comment that was right before the diff and is wrong after it is a finding, even if the diff did not touch the comment.
+
+- E1. **Wrong or stale:** the comment says something the code does not do: a condition, an order of steps, a return value, a named class or method that no longer exists, a `{@code}` value or a number that changed.
+- E2. **Facts that prevent bugs**, where the comment states them or the method needs them: units (nanos or millis, scaled `Decimal64` mantissas), clock (event time, monotonic or wall clock, checked against the clock the code really reads), threading (which thread calls it, thread-safety), allocation (a method called allocation-free must not allocate), lifetime of reused objects and flyweights.
+- E3. **Decisions:** a cited ADR exists and says what the comment claims.
+- E4. **Comments that say nothing:** one that only restates the name (`/** Returns the price. */`) on a method that needs no comment should be removed; on one that does need it, it should state the fact the reader needs.
+
 ### Out of scope
 
-Do not report what CI already enforces: formatting (Spotless), Error Prone and NullAway warnings, ArchUnit failures in services that apply the rules, JaCoCo thresholds, SonarQube, `buf lint` / `buf format` / `buf breaking`, line endings, broken internal links, the Conventions check on the pull request title and branch. Do not report style preferences or naming taste.
+Do not report what CI already enforces: a missing Javadoc or tag and broken `{@link}`s (Checkstyle, `-Xdoclint`), formatting (Spotless), Error Prone and NullAway warnings, ArchUnit failures in services that apply the rules, JaCoCo thresholds, SonarQube, `buf lint` / `buf format` / `buf breaking`, line endings, broken internal links, the Conventions check on the pull request title and branch. Do not report style preferences or naming taste.
 
 <!-- Reviewer criteria: end. -->
 

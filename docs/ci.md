@@ -71,6 +71,7 @@ Runs `./mvnw verify` on Linux with JDK 25 (Temurin), with the Maven repository c
 | Tests | JUnit, ArchUnit | Every test passes |
 | Formatting | Spotless (google-java-format) | No unformatted file |
 | Static analysis | Error Prone + NullAway | No warning at all (`-Werror`) |
+| Comments | Checkstyle ([`checkstyle.xml`](../checkstyle.xml)) and `-Xdoclint` | No missing Javadoc or tag, no broken `{@link}`, per the [rule](../CONTRIBUTING.md#code-comments); Checkstyle skips tests and generated code, `-Xdoclint` only generated code |
 | Coverage | JaCoCo | ≥ 80 % lines and ≥ 70 % branches per module; generated code excluded |
 
 All of them are part of the Maven build, so `./mvnw verify` on your machine gives the same result as CI. See [Building](../README.md#-building) for how each one is configured.
@@ -192,8 +193,9 @@ A new required check must be added to the ruleset by name (the job's `name:`), a
 
 | Check | Command |
 | :--- | :--- |
-| Build, tests, formatting, static analysis, coverage | `./mvnw verify` |
+| Build, tests, formatting, static analysis, comments, coverage | `./mvnw verify` |
 | Format the code | `./mvnw spotless:apply` |
+| Comments only (lists every missing Javadoc or tag) | `./mvnw checkstyle:check@checkstyle-check` |
 | Coverage report | `target/site/jacoco/index.html` in each module, after `verify` |
 | Compose smoke test | `docker compose up -d --wait` in `infra/docker` |
 | Protobuf contracts | `buf lint && buf breaking --against '../../../../.git#branch=main,subdir=contracts/src/main/protobuf'` in `contracts/src/main/protobuf` |

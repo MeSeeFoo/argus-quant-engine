@@ -73,6 +73,12 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
    * Sends with {@code kafkaTemplate}, through a ring buffer of {@code properties.bufferCapacity()}
    * bytes, the events of {@code instruments}: the shard's, which the relay's events come from.
    * {@code monotonicClock} measures the interval of the top of book.
+   *
+   * @param kafkaTemplate sends the records, on the publisher thread only
+   * @param properties the adapter's properties
+   * @param instruments the shard's instruments
+   * @param kafkaCounters the adapter's counters
+   * @param monotonicClock a monotonic clock, in nanoseconds
    */
   public KafkaMarketDataPublisher(
       KafkaTemplate<String, Message> kafkaTemplate,
@@ -128,8 +134,9 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
 
   /**
    * Drains up to {@code EVENT_LIMIT} buffered events and, once per interval, sends the tops of book
-   * that changed. Returns how many events it read and tops of book it flushed, for the idle
-   * strategy. Called by the publisher thread only.
+   * that changed. Called by the publisher thread only.
+   *
+   * @return how many events it read and tops of book it flushed, for the idle strategy
    */
   int sendBufferedEventsToKafka() {
     int eventsRead = events.read(eventHandler, EVENT_LIMIT);
@@ -143,6 +150,12 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     return eventsRead;
   }
 
+  /**
+   * Sends the top of book of every instrument that changed since the last flush, on the publisher
+   * thread. A failure is counted and does not stop the others.
+   *
+   * @return how many it flushed
+   */
   private int sendBestBidAskConflationCached() {
     int eventsFlushed = 0;
     for (int instrumentId = 0; instrumentId < bestBidAskChanged.length; instrumentId++) {
@@ -160,6 +173,14 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     return eventsFlushed;
   }
 
+  /**
+   * Handles one slot of the ring, on the publisher thread: sends a trade, conflates a top of book.
+   *
+   * @param type the slot's type, {@link #TRADE} or {@link #BEST_BID_ASK}
+   * @param buffer the ring buffer
+   * @param index where the slot starts
+   * @param length the length of the slot in bytes
+   */
   private void onEvent(int type, MutableDirectBuffer buffer, int index, int length) {
     long sequence = buffer.getLong(index);
 
@@ -179,11 +200,22 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     }
   }
 
+  /**
+   * Counts an event that could not be handed to Kafka, and logs a sample of them.
+   *
+   * @param e why it failed
+   */
   private void countSendFailure(RuntimeException e) {
     kafkaCounters.countFailedSending();
     failureLog.log("Could not hand an event to Kafka", kafkaCounters.failedSending(), e);
   }
 
+  /**
+   * Overwrites the instrument's pre-allocated slot, on the publisher thread. Allocation-free.
+   *
+   * @param bestBidAsk the update; copied, so it can be reused afterwards
+   * @param sequence the sequence it was published with
+   */
   private void conflateEvent(BestBidAsk bestBidAsk, long sequence) {
     int instrumentId = bestBidAsk.instrument().id();
     bestBidAskChanged[instrumentId] = true;
@@ -191,6 +223,12 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     bestBidAskSequenceCache[instrumentId] = sequence;
   }
 
+  /**
+   * Maps a trade to Protobuf and sends it. On the publisher thread; allocates and may block.
+   *
+   * @param trade the trade
+   * @param sequence the sequence it was published with
+   */
   private void sendTradeToKafka(Trade trade, long sequence) {
     sendMessageToKafka(
         ProtobufMappers.key(trade.instrument()),
@@ -198,6 +236,12 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
         properties.tradeTopicName());
   }
 
+  /**
+   * Maps a top of book to Protobuf and sends it. On the publisher thread; allocates and may block.
+   *
+   * @param bestBidAsk the top of book
+   * @param sequence the sequence it was published with
+   */
   private void sendBestBidAskToKafka(BestBidAsk bestBidAsk, long sequence) {
     sendMessageToKafka(
         ProtobufMappers.key(bestBidAsk.instrument()),
@@ -205,6 +249,13 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
         properties.bestBidAskTopicName());
   }
 
+  /**
+   * Hands a record to the template; the {@link MetricProducerListener} counts how it ends.
+   *
+   * @param key the record key
+   * @param message the record value
+   * @param topic the topic
+   */
   @SuppressWarnings("FutureReturnValueIgnored")
   private void sendMessageToKafka(String key, Message message, String topic) {
     kafkaTemplate.send(topic, key, message);
@@ -217,11 +268,19 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
    * <p>Generic because Spring Boot injects it into its template as a {@code
    * ProducerListener<Object, Object>}: a bean declared with the template's own types would not
    * match.
+   *
+   * @param <K> the record's key type
+   * @param <V> the record's value type
    */
   static final class MetricProducerListener<K, V> implements ProducerListener<K, V> {
     private final KafkaCounters counters;
     private final FailureLog failureLog = new FailureLog(LOG, FAILURE_LOG_INTERVAL);
 
+    /**
+     * Creates a listener that writes {@code counters}.
+     *
+     * @param counters the adapter's counters
+     */
     MetricProducerListener(KafkaCounters counters) {
       this.counters = counters;
     }
@@ -245,6 +304,7 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     }
   }
 
+  /** The publisher thread's work: the only code that drains the ring and calls Kafka. */
   private final class MessageSenderAgent implements Agent {
     @Override
     public int doWork() throws Exception {
@@ -271,7 +331,11 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     }
   }
 
-  /** What it published and dropped. */
+  /**
+   * What it published and dropped.
+   *
+   * @return this publisher's counters
+   */
   KafkaCounters kafkaCounters() {
     return kafkaCounters;
   }

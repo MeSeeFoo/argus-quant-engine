@@ -30,17 +30,36 @@ class FeedGatewayConfiguration {
   /** Room for about fifteen thousand events between the inbound adapters and the gateway agent. */
   private static final int QUEUE_CAPACITY = 1 << 20;
 
+  /**
+   * The shard's instruments, in configuration order.
+   *
+   * @param properties the gateway's properties
+   * @return the numbered instruments
+   */
   @Bean
   Instruments instruments(FeedGatewayProperties properties) {
     return new Instruments(properties.instruments().stream().map(Instrument::parse).toList());
   }
 
+  /**
+   * The gateway's counters.
+   *
+   * @return a new set of counters
+   */
   @Bean
   MarketDataCounters marketDataCounters() {
     return new MarketDataCounters();
   }
 
-  /** Relays to every outbound adapter that provides a {@code MarketDataPublisher}. */
+  /**
+   * Relays to every outbound adapter that provides a {@code MarketDataPublisher}.
+   *
+   * @param properties the gateway's properties
+   * @param instruments the shard's instruments
+   * @param marketDataPublishers every outbound adapter
+   * @param counters the gateway's counters
+   * @return the relay
+   */
   @Bean
   MarketDataRelay marketDataRelay(
       FeedGatewayProperties properties,
@@ -51,14 +70,27 @@ class FeedGatewayConfiguration {
         instruments, marketDataPublishers, counters, properties.heartbeatInterval().toNanos());
   }
 
-  /** Where market data enters, offered to the inbound adapters as {@code IngestMarketData}. */
+  /**
+   * Where market data enters, offered to the inbound adapters as {@code IngestMarketData}.
+   *
+   * @param instruments the shard's instruments
+   * @param marketDataRelay where drained events go
+   * @param counters the gateway's counters
+   * @return the queue
+   */
   @Bean
   MarketDataQueue marketDataQueue(
       Instruments instruments, MarketDataRelay marketDataRelay, MarketDataCounters counters) {
     return new MarketDataQueue(instruments, marketDataRelay, counters, QUEUE_CAPACITY);
   }
 
-  /** The gateway agent, on its own thread from start to shut down. */
+  /**
+   * The gateway agent, on its own thread from start to shut down.
+   *
+   * @param marketDataQueue what it drains
+   * @param marketDataRelay where the events go
+   * @return the agent's lifecycle, started by Spring
+   */
   @Bean
   AgentLifecycle feedAgent(MarketDataQueue marketDataQueue, MarketDataRelay marketDataRelay) {
     return new AgentLifecycle(
@@ -67,6 +99,12 @@ class FeedGatewayConfiguration {
         new BackoffIdleStrategy());
   }
 
+  /**
+   * Publishes the gateway's counters as metrics.
+   *
+   * @param counters the gateway's counters
+   * @return the binder that registers them
+   */
   @Bean
   MeterBinder marketDataMetrics(MarketDataCounters counters) {
     return registry -> {

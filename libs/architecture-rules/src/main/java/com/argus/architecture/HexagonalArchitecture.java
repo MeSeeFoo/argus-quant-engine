@@ -146,6 +146,7 @@ public final class HexagonalArchitecture {
           .because("an outbound adapter takes data out, and input ports are where data enters")
           .allowEmptyShould(true);
 
+  /** Packages must not depend on each other in a cycle, whatever their layer. */
   @ArchTest
   public static final ArchRule PACKAGES_MUST_BE_FREE_OF_CYCLES =
       slices()
@@ -155,7 +156,11 @@ public final class HexagonalArchitecture {
           .as("packages must be free of dependency cycles")
           .allowEmptyShould(true);
 
-  /** Every rule above, in declaration order. */
+  /**
+   * Every rule above, in declaration order.
+   *
+   * @return the rules
+   */
   public static List<ArchRule> rules() {
     return List.of(
         LAYERS_MUST_RESPECT_THE_HEXAGON,
