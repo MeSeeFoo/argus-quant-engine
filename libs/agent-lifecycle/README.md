@@ -2,7 +2,7 @@
 
 Runs an Agrona agent on its own thread while the Spring context is running. Spring starts and stops the agent and is never on the path of a message ([ADR 0010](../../docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
 
-It is for the services built on agents: the feed gateway uses it, and the model engine will. It holds this one class on purpose: it is not a place for general helpers.
+It is for the services built on agents: the feed gateway and the model engine. It holds this one class on purpose: it is not a place for general helpers.
 
 ## Using it
 

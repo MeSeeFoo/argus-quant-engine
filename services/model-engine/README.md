@@ -33,7 +33,7 @@ Start the [feed gateway](../feed-gateway/README.md#running-it) as its README say
 ./mvnw -pl services/model-engine spring-boot:run
 ```
 
-Actuator listens on port **8082** (8080 is Apicurio in the [local environment](../../README.md#-local-environment) and 8081 the gateway): `http://localhost:8082/actuator/health`. Each JVM embeds its own driver in a directory of its own, so both run on one machine without sharing anything.
+Actuator listens on port **8082** (8080 is Apicurio in the [local environment](../../README.md#-local-environment) and 8081 the gateway): `http://localhost:8082/actuator/health`. Each JVM embeds its own driver in a generated directory of its own, so both run on one machine without sharing anything. Setting `-Daeron.dir` replaces that generated name: never give both JVMs the same value, because each driver deletes the directory on start.
 
 ### JVM flags
 
