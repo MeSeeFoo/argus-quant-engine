@@ -55,6 +55,7 @@
         <aeron.version>1.54.0</aeron.version>
         <agrona.version>2.7.0</agrona.version>
         <sbe.version>1.41.0</sbe.version>
+        <disruptor.version>4.0.0</disruptor.version>
         <protobuf.version>4.36.2</protobuf.version>
         <!-- Same version as the registry in infra/docker (ADR 0008) -->
         <apicurio-registry.version>3.3.4</apicurio-registry.version>
@@ -164,6 +165,11 @@
                 <groupId>uk.co.real-logic</groupId>
                 <artifactId>sbe-tool</artifactId>
                 <version>${sbe.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lmax</groupId>
+                <artifactId>disruptor</artifactId>
+                <version>${disruptor.version}</version>
             </dependency>
 
             <!-- Durable path -->

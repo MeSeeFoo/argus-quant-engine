@@ -10,12 +10,12 @@ Ports and adapters as laid out in [ADR 0009](../../docs/adr/0009-hexagonal-archi
 
 ```text
 com.argus.modelengine
-├── domain                   Windows and evaluation of models (empty so far)
-├── application              ModelEngineAgent (the thread that runs the engine's work)
-│   ├── port.in              Where data enters (empty so far)
+├── domain                   Trade, BestBidAsk (read-only views) and their reused objects, EventStore, EventWindow, Instruments, the reader's checks
+├── application              MarketDataReader (the reader's use case), MarketEventStores, ModelEngineAgent
+│   ├── port.in              MarketDataSource (polled by the reader), IngestMarketData (what the source hands over)
 │   └── port.out             Where data leaves (empty so far)
 ├── adapter
-│   ├── in.<technology>      Inbound adapters, each with its configuration (none so far)
+│   ├── in.aeron             AeronMarketDataSource: decodes the gateway's SBE stream
 │   └── out.<technology>     Outbound adapters, each with its configuration (none so far)
 └── config                   The agent, and the JVM's Media Driver and Aeron client
 ```
