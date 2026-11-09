@@ -17,6 +17,12 @@ public final class Instruments {
 
   private final Instrument[] instruments;
 
+  /**
+   * Numbers the instruments of the shard from 0, in the given order.
+   *
+   * @param instruments the shard's instruments
+   * @throws IllegalArgumentException if the list is empty or repeats a symbol
+   */
   public Instruments(List<Instrument> instruments) {
     if (instruments.isEmpty()) {
       throw new IllegalArgumentException("at least one instrument is required");
@@ -33,10 +39,21 @@ public final class Instruments {
     }
   }
 
+  /**
+   * The size of the shard: per-instrument arrays have this length.
+   *
+   * @return the number of instruments
+   */
   public int size() {
     return instruments.length;
   }
 
+  /**
+   * The instrument numbered {@code index}, carrying its {@link Instrument#id}.
+   *
+   * @param index from 0 to {@link #size} (exclusive)
+   * @return the instrument
+   */
   public Instrument get(int index) {
     return instruments[index];
   }
@@ -44,7 +61,11 @@ public final class Instruments {
   /**
    * Returns the index of the instrument whose symbol is the first {@code length} bytes of {@code
    * symbol}, or {@link #UNKNOWN}. A shard holds a handful of instruments, so a linear scan is
-   * enough.
+   * enough. Allocation-free.
+   *
+   * @param symbol the buffer holding a symbol
+   * @param length the length of the symbol in {@code symbol}
+   * @return the index, or {@link #UNKNOWN}
    */
   public int indexOf(byte[] symbol, int length) {
     for (int i = 0; i < instruments.length; i++) {
@@ -58,6 +79,9 @@ public final class Instruments {
   /**
    * Returns the index of an instrument equal to {@code instrument}, or {@link #UNKNOWN}. A linear
    * scan, for configuration: the hot path uses {@link Instrument#id}.
+   *
+   * @param instrument the instrument to look for
+   * @return the index, or {@link #UNKNOWN}
    */
   public int indexOf(Instrument instrument) {
     for (int i = 0; i < instruments.length; i++) {

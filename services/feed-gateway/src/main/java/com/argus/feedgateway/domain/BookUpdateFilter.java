@@ -11,12 +11,23 @@ public final class BookUpdateFilter {
 
   private final long[] lastBookUpdateIds;
 
+  /**
+   * Creates a filter that has seen nothing yet.
+   *
+   * @param instrumentCount the number of instruments of the shard
+   */
   public BookUpdateFilter(int instrumentCount) {
     lastBookUpdateIds = new long[instrumentCount];
     Arrays.fill(lastBookUpdateIds, Long.MIN_VALUE);
   }
 
-  /** Returns whether the update is newer than the last accepted one, and remembers it if so. */
+  /**
+   * Returns whether the update is newer than the last accepted one, and remembers it if so.
+   *
+   * @param instrument the instrument's {@link Instrument#id}
+   * @param bookUpdateId the book version on the venue
+   * @return {@code true} if the update is newer
+   */
   public boolean accept(int instrument, long bookUpdateId) {
     if (bookUpdateId <= lastBookUpdateIds[instrument]) {
       return false;

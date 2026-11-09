@@ -29,7 +29,15 @@ final class BidAskSlot {
 
   private BidAskSlot() {}
 
-  /** Writes {@code book}, whose instrument has index {@code instrument}, at {@code index}. */
+  /**
+   * Writes {@code book}, whose instrument has index {@code instrument}, at {@code index}. On an
+   * inbound adapter's thread; allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the claimed slot starts
+   * @param book the values to copy; only read during this call
+   * @param instrument the instrument's index in {@link Instruments}
+   */
   static void write(MutableDirectBuffer buffer, int index, BestBidAsk book, int instrument) {
     buffer.putLong(index + BOOK_UPDATE_ID, book.bookUpdateId());
     buffer.putLong(index + BID_PRICE, book.bidPrice());
@@ -41,7 +49,15 @@ final class BidAskSlot {
     buffer.putInt(index + INSTRUMENT, instrument);
   }
 
-  /** Fills {@code book} with the slot at {@code index}. */
+  /**
+   * Fills {@code book} with the slot at {@code index}. On the gateway agent's thread;
+   * allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the slot starts
+   * @param instruments the shard's instruments, to read the instrument back
+   * @param book the reused instance to fill
+   */
   static void read(DirectBuffer buffer, int index, Instruments instruments, BestBidAsk book) {
     book.instrument(instruments.get(buffer.getInt(index + INSTRUMENT)))
         .bookUpdateId(buffer.getLong(index + BOOK_UPDATE_ID))

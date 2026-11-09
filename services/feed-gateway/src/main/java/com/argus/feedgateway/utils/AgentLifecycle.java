@@ -28,7 +28,12 @@ public final class AgentLifecycle implements SmartLifecycle {
 
   private @Nullable AgentRunner runner;
 
-  /** Runs {@code agent} in Spring's default phase: started last, stopped first. */
+  /**
+   * Runs {@code agent} in Spring's default phase: started last, stopped first.
+   *
+   * @param agent the agent to run
+   * @param idleStrategy what its thread does when there is no work
+   */
   public AgentLifecycle(Agent agent, IdleStrategy idleStrategy) {
     this(agent, idleStrategy, SmartLifecycle.DEFAULT_PHASE);
   }
@@ -36,6 +41,10 @@ public final class AgentLifecycle implements SmartLifecycle {
   /**
    * Runs {@code agent} in {@code phase}. Spring starts the lower phases first and stops them last,
    * so an agent that others feed, such as the Kafka sender, takes a lower phase than they do.
+   *
+   * @param agent the agent to run
+   * @param idleStrategy what its thread does when there is no work
+   * @param phase its Spring lifecycle phase
    */
   public AgentLifecycle(Agent agent, IdleStrategy idleStrategy, int phase) {
     this.agent = agent;
@@ -53,6 +62,11 @@ public final class AgentLifecycle implements SmartLifecycle {
     runner = newRunner;
   }
 
+  /**
+   * Logs a failure of the agent, on the agent's thread.
+   *
+   * @param error what failed
+   */
   private void onError(Throwable error) {
     LOG.error("Agent {} failed", agent.roleName(), error);
   }

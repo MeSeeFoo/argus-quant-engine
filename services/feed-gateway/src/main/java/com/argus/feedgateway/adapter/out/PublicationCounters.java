@@ -12,20 +12,30 @@ public class PublicationCounters {
   private final AtomicLong trades = new AtomicLong();
   private final AtomicLong bestBidAsks = new AtomicLong();
 
-  /** {@code Trade} messages handed to the transport. */
+  /**
+   * {@code Trade} messages handed to the transport.
+   *
+   * @return the count since the gateway started
+   */
   public long trades() {
     return trades.get();
   }
 
-  /** {@code BestBidAsk} messages handed to the transport. */
+  /**
+   * {@code BestBidAsk} messages handed to the transport.
+   *
+   * @return the count since the gateway started
+   */
   public long bestBidAsks() {
     return bestBidAsks.get();
   }
 
+  /** Counts a trade handed to the transport. Allocation-free. */
   public void countTrade() {
     trades.incrementAndGet();
   }
 
+  /** Counts a top-of-book update handed to the transport. Allocation-free. */
   public void countBestBidAsk() {
     bestBidAsks.incrementAndGet();
   }

@@ -33,7 +33,15 @@ final class TradeSlot {
 
   private TradeSlot() {}
 
-  /** Writes {@code trade}, whose instrument has index {@code instrument}, at {@code index}. */
+  /**
+   * Writes {@code trade}, whose instrument has index {@code instrument}, at {@code index}. On an
+   * inbound adapter's thread; allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the claimed slot starts
+   * @param trade the values to copy; only read during this call
+   * @param instrument the instrument's index in {@link Instruments}
+   */
   static void write(MutableDirectBuffer buffer, int index, Trade trade, int instrument) {
     buffer.putLong(index + TRADE_ID, trade.tradeId());
     buffer.putLong(index + PRICE, trade.price());
@@ -45,7 +53,15 @@ final class TradeSlot {
         index + AGGRESSOR_SIDE, trade.aggressorSide() == AggressorSide.SELL ? SELL : BUY);
   }
 
-  /** Fills {@code trade} with the slot at {@code index}. */
+  /**
+   * Fills {@code trade} with the slot at {@code index}. On the gateway agent's thread;
+   * allocation-free.
+   *
+   * @param buffer the ring buffer
+   * @param index where the slot starts
+   * @param instruments the shard's instruments, to read the instrument back
+   * @param trade the reused instance to fill
+   */
   static void read(DirectBuffer buffer, int index, Instruments instruments, Trade trade) {
     trade
         .instrument(instruments.get(buffer.getInt(index + INSTRUMENT)))

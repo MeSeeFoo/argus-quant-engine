@@ -13,10 +13,20 @@ import com.argus.feedgateway.domain.Trade;
  */
 public interface MarketDataPublisher {
 
-  /** Publishes {@code trade} as message {@code sequence}, one more than the last one. */
+  /**
+   * Publishes {@code trade} as message {@code sequence}, one more than the last one.
+   *
+   * @param trade the trade; only valid during this call
+   * @param sequence the message's sequence
+   */
   void publishTrade(Trade trade, long sequence);
 
-  /** Publishes {@code bestBidAsk} as message {@code sequence}, one more than the last one. */
+  /**
+   * Publishes {@code bestBidAsk} as message {@code sequence}, one more than the last one.
+   *
+   * @param bestBidAsk the update; only valid during this call
+   * @param sequence the message's sequence
+   */
   void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence);
 
   /**

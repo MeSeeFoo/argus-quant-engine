@@ -40,6 +40,13 @@ public final class BinanceStreamDecoder {
   private final Trade trade = new Trade();
   private final BestBidAsk book = new BestBidAsk();
 
+  /**
+   * Creates the decoder of one connection.
+   *
+   * @param instruments the shard's instruments
+   * @param ingest where the decoded events go
+   * @param counters the adapter's counters
+   */
   public BinanceStreamDecoder(
       Instruments instruments, IngestMarketData ingest, BinanceCounters counters) {
     this.instruments = instruments;
@@ -48,9 +55,15 @@ public final class BinanceStreamDecoder {
   }
 
   /**
-   * Decodes one frame.
+   * Decodes one frame, on the connection's thread. Allocation-free. The events handed to the
+   * gateway are the reused {@link Trade} and {@link BestBidAsk}, valid only during the call to the
+   * port.
    *
-   * @param receiveTimestamp time the gateway received the frame, epoch nanoseconds
+   * @param buffer the buffer holding the frame; only read during this call
+   * @param offset where the frame starts in {@code buffer}
+   * @param length the length of the frame in bytes
+   * @param receiveTimestamp time the gateway received the frame, epoch nanoseconds on the wall
+   *     clock
    */
   public void onFrame(DirectBuffer buffer, int offset, int length, long receiveTimestamp) {
     if (length < ROOT_OFFSET) {
@@ -72,6 +85,13 @@ public final class BinanceStreamDecoder {
     }
   }
 
+  /**
+   * Validates a trades message and hands over one {@link Trade} per entry, or none if any entry is
+   * malformed. Allocation-free.
+   *
+   * @param receiveTimestamp time the gateway received the frame, epoch nanoseconds on the wall
+   *     clock
+   */
   private void onTrades(long receiveTimestamp) {
     int blockLength = header.blockLength();
     if (blockLength < TradesStreamEventDecoder.BLOCK_LENGTH
@@ -132,6 +152,12 @@ public final class BinanceStreamDecoder {
     }
   }
 
+  /**
+   * Validates a top-of-book message and hands over the reused {@link BestBidAsk}. Allocation-free.
+   *
+   * @param receiveTimestamp time the gateway received the frame, epoch nanoseconds on the wall
+   *     clock
+   */
   private void onBestBidAsk(long receiveTimestamp) {
     int blockLength = header.blockLength();
     if (blockLength < BestBidAskStreamEventDecoder.BLOCK_LENGTH
@@ -168,6 +194,12 @@ public final class BinanceStreamDecoder {
     ingest.onBestBidAsk(book);
   }
 
+  /**
+   * Finds the instrument of the symbol just read into {@link #symbol}, counting an unknown one.
+   *
+   * @param symbolLength the length of the symbol in bytes
+   * @return its index in the shard, or {@link Instruments#UNKNOWN}
+   */
   private int instrumentOf(int symbolLength) {
     int instrument = instruments.indexOf(symbol, symbolLength);
     if (instrument == Instruments.UNKNOWN) {
@@ -176,7 +208,12 @@ public final class BinanceStreamDecoder {
     return instrument;
   }
 
-  /** Whether a part of the message ending at {@code end} lies inside the frame. */
+  /**
+   * Whether a part of the message ending at {@code end} lies inside the frame.
+   *
+   * @param end the offset just past that part
+   * @return {@code true} if it fits
+   */
   private boolean fits(long end) {
     return end <= frame.capacity();
   }

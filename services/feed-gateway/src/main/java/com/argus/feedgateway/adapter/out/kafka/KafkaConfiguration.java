@@ -31,12 +31,25 @@ class KafkaConfiguration {
   // it drains what the gateway agent queued last
   private static final int SENDER_PHASE = 10;
 
+  /**
+   * The adapter's counters.
+   *
+   * @return a new set of counters
+   */
   @Bean
   KafkaCounters kafkaCounters() {
     return new KafkaCounters();
   }
 
-  /** Plain Java: Spring only creates it. The gateway agent calls it directly (ADR 0010). */
+  /**
+   * Plain Java: Spring only creates it. The gateway agent calls it directly (ADR 0010).
+   *
+   * @param kafkaTemplate the template Spring Boot configures with {@code spring.kafka.*}
+   * @param properties the adapter's properties
+   * @param instruments the shard's instruments
+   * @param kafkaCounters the adapter's counters
+   * @return the publisher
+   */
   @Bean
   KafkaMarketDataPublisher kafkaMarketDataPublisher(
       KafkaTemplate<String, Message> kafkaTemplate,
@@ -50,13 +63,22 @@ class KafkaConfiguration {
   /**
    * Replaces Spring Boot's {@code LoggingProducerListener} in the template it creates, with the
    * types it asks for.
+   *
+   * @param kafkaCounters the adapter's counters
+   * @return the listener
    */
   @Bean
   ProducerListener<Object, Object> kafkaProducerListener(KafkaCounters kafkaCounters) {
     return new KafkaMarketDataPublisher.MetricProducerListener<>(kafkaCounters);
   }
 
-  /** The thread that drains the publisher's ring buffer into Kafka, from start to shutdown. */
+  /**
+   * The thread that drains the publisher's ring buffer into Kafka, from start to shutdown.
+   *
+   * @param properties the adapter's properties
+   * @param publisher the publisher whose ring buffer it drains
+   * @return the agent's lifecycle, started by Spring
+   */
   @Bean
   AgentLifecycle kafkaSenderAgent(KafkaProperties properties, KafkaMarketDataPublisher publisher) {
     return new AgentLifecycle(
@@ -66,6 +88,12 @@ class KafkaConfiguration {
         SENDER_PHASE);
   }
 
+  /**
+   * Publishes the adapter's counters as metrics.
+   *
+   * @param counters the adapter's counters
+   * @return the binder that registers them
+   */
   @Bean
   MeterBinder kafkaPublicationMetrics(KafkaCounters counters) {
     return registry -> {

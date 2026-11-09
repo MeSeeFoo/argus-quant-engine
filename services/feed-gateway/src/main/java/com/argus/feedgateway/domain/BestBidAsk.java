@@ -25,6 +25,9 @@ public final class BestBidAsk {
    * Overwrites this one with every value of {@code other}, without allocating. Both then share the
    * same {@link Instrument}, which is immutable; changing either one afterwards does not affect the
    * other.
+   *
+   * @param other the values to copy
+   * @return this instance
    */
   public BestBidAsk copyFrom(BestBidAsk other) {
     instrument = other.instrument;
@@ -38,6 +41,12 @@ public final class BestBidAsk {
     return this;
   }
 
+  /**
+   * The quoted instrument.
+   *
+   * @return the instrument, never {@code null}
+   * @throws NullPointerException if none has been set yet
+   */
   public Instrument instrument() {
     return Objects.requireNonNull(instrument, "instrument not set");
   }
@@ -47,7 +56,11 @@ public final class BestBidAsk {
     return this;
   }
 
-  /** Book version on the venue: it only moves forward. */
+  /**
+   * Book version on the venue: it only moves forward.
+   *
+   * @return the venue's update id
+   */
   public long bookUpdateId() {
     return bookUpdateId;
   }
@@ -73,7 +86,15 @@ public final class BestBidAsk {
     return askQuantity;
   }
 
-  /** Sets the bid from the venue's decimals: {@code mantissa × 10^exponent}. */
+  /**
+   * Sets the bid from the venue's decimals: {@code mantissa × 10^exponent}.
+   *
+   * @param priceMantissa the venue's price mantissa
+   * @param priceExponent the venue's price exponent
+   * @param quantityMantissa the venue's quantity mantissa
+   * @param quantityExponent the venue's quantity exponent
+   * @return this instance
+   */
   public BestBidAsk bid(
       long priceMantissa, int priceExponent, long quantityMantissa, int quantityExponent) {
     bidPrice = Decimal64.fromDecimal(priceMantissa, priceExponent);
@@ -81,7 +102,15 @@ public final class BestBidAsk {
     return this;
   }
 
-  /** Sets the ask from the venue's decimals: {@code mantissa × 10^exponent}. */
+  /**
+   * Sets the ask from the venue's decimals: {@code mantissa × 10^exponent}.
+   *
+   * @param priceMantissa the venue's price mantissa
+   * @param priceExponent the venue's price exponent
+   * @param quantityMantissa the venue's quantity mantissa
+   * @param quantityExponent the venue's quantity exponent
+   * @return this instance
+   */
   public BestBidAsk ask(
       long priceMantissa, int priceExponent, long quantityMantissa, int quantityExponent) {
     askPrice = Decimal64.fromDecimal(priceMantissa, priceExponent);
@@ -89,7 +118,11 @@ public final class BestBidAsk {
     return this;
   }
 
-  /** Event time on the venue, epoch nanoseconds. */
+  /**
+   * Time of the update on the venue: its event time.
+   *
+   * @return epoch nanoseconds
+   */
   public long exchangeTimestamp() {
     return exchangeTimestamp;
   }
@@ -99,7 +132,11 @@ public final class BestBidAsk {
     return this;
   }
 
-  /** Time the gateway received it, epoch nanoseconds. */
+  /**
+   * Time the gateway received it, on the wall clock. Only for measuring latency, never for windows.
+   *
+   * @return epoch nanoseconds
+   */
   public long receiveTimestamp() {
     return receiveTimestamp;
   }
@@ -109,7 +146,11 @@ public final class BestBidAsk {
     return this;
   }
 
-  /** Whether every price and quantity fits {@code Decimal64} exactly. */
+  /**
+   * Whether every price and quantity fits {@code Decimal64} exactly.
+   *
+   * @return {@code true} if all four are representable
+   */
   public boolean isRepresentable() {
     return bidPrice != Decimal64.NOT_REPRESENTABLE
         && bidQuantity != Decimal64.NOT_REPRESENTABLE

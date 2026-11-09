@@ -58,6 +58,11 @@ public final class MarketDataQueue implements IngestMarketData {
   private final BestBidAsk book = new BestBidAsk();
 
   /**
+   * Creates the queue and allocates its ring buffer once.
+   *
+   * @param instruments the shard's instruments
+   * @param relay where drained events go
+   * @param counters the gateway's counters
    * @param capacity bytes of the ring buffer; a power of two
    */
   public MarketDataQueue(
@@ -115,12 +120,21 @@ public final class MarketDataQueue implements IngestMarketData {
    * Hands up to {@code limit} queued events to the relay, in the order they were queued. Called by
    * the gateway agent only.
    *
+   * @param limit the most events to drain in this call
    * @return the number of events drained, for the agent's idle strategy
    */
   public int drain(int limit) {
     return events.read(eventHandler, limit);
   }
 
+  /**
+   * Hands one slot of the ring to the relay, on the agent's thread. Allocation-free.
+   *
+   * @param type the slot's type, {@link #TRADE} or {@link #BEST_BID_ASK}
+   * @param buffer the ring buffer
+   * @param index where the slot starts
+   * @param length the length of the slot in bytes
+   */
   private void onEvent(int type, MutableDirectBuffer buffer, int index, int length) {
     if (type == TRADE) {
       TradeSlot.read(buffer, index, instruments, trade);

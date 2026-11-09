@@ -30,7 +30,11 @@ public final class Decimal64 {
 
   /**
    * Returns the canonical mantissa of {@code mantissa × 10^exponent}, or {@link
-   * #NOT_REPRESENTABLE}.
+   * #NOT_REPRESENTABLE}. Allocation-free.
+   *
+   * @param mantissa the venue's mantissa
+   * @param exponent the venue's exponent
+   * @return the mantissa at scale 10⁻⁸, or {@link #NOT_REPRESENTABLE}
    */
   public static long fromDecimal(long mantissa, int exponent) {
     if (mantissa == 0) {

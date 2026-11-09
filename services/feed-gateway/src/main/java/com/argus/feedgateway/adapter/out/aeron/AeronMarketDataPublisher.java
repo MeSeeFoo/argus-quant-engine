@@ -42,11 +42,20 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
   private final BestBidAskEncoder bestBidAskEncoder = new BestBidAskEncoder();
   private final HeartbeatEncoder heartbeatEncoder = new HeartbeatEncoder();
 
+  /**
+   * Creates a publisher on the shard's publication.
+   *
+   * @param publication the publication; only this publisher offers to it
+   */
   public AeronMarketDataPublisher(ExclusivePublication publication) {
     this.publication = publication;
   }
 
-  /** Heartbeats and drops, which only Aeron counts. */
+  /**
+   * Heartbeats and drops, which only Aeron counts.
+   *
+   * @return this publisher's counters
+   */
   public AeronCounters aeronCounters() {
     return aeronCounters;
   }
@@ -100,6 +109,12 @@ public final class AeronMarketDataPublisher implements MarketDataPublisher {
     }
   }
 
+  /**
+   * Offers the encoded message to Aeron, counting a refusal. Never blocks; allocation-free.
+   *
+   * @param length the length of the message at the start of {@link #buffer}, header included
+   * @return {@code true} if Aeron took it
+   */
   private boolean offer(int length) {
     long result = publication.offer(buffer, 0, length);
     if (result == Publication.ADMIN_ACTION) {

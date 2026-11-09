@@ -18,7 +18,13 @@ final class ProtobufMappers {
 
   private ProtobufMappers() {}
 
-  /** {@code trade}, published with {@code sequence}, as the message of the trades topic. */
+  /**
+   * {@code trade}, published with {@code sequence}, as the message of the trades topic.
+   *
+   * @param trade the trade
+   * @param sequence the sequence it was published with
+   * @return a new message
+   */
   static com.argus.contracts.proto.market.trades.v1.Trade trade(Trade trade, long sequence) {
     Instrument instrument = trade.instrument();
     return com.argus.contracts.proto.market.trades.v1.Trade.newBuilder()
@@ -34,7 +40,13 @@ final class ProtobufMappers {
         .build();
   }
 
-  /** {@code book}, published with {@code sequence}, as the message of the quotes topic. */
+  /**
+   * {@code book}, published with {@code sequence}, as the message of the quotes topic.
+   *
+   * @param book the top of book
+   * @param sequence the sequence it was published with
+   * @return a new message
+   */
   static com.argus.contracts.proto.market.quotes.v1.BestBidAsk bestBidAsk(
       BestBidAsk book, long sequence) {
     Instrument instrument = book.instrument();
@@ -55,12 +67,21 @@ final class ProtobufMappers {
   /**
    * The record key of every market data topic, {@code VENUE:SYMBOL}: it spreads instruments over
    * partitions and keeps each one in order.
+   *
+   * @param instrument the instrument
+   * @return the record key
    */
   static String key(Instrument instrument) {
     return instrument.toString();
   }
 
-  // Exhaustive: a new AggressorSide fails to compile here instead of publishing SIDE_UNSPECIFIED
+  /**
+   * Exhaustive: a new {@link AggressorSide} fails to compile here instead of publishing {@code
+   * SIDE_UNSPECIFIED}.
+   *
+   * @param side the side in the gateway's terms
+   * @return the side in the contract's terms
+   */
   private static Side side(AggressorSide side) {
     return switch (side) {
       case BUY -> Side.SIDE_BUY;

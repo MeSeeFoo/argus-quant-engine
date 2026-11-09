@@ -24,12 +24,26 @@ class BinanceConfiguration {
   /** A wide margin over the frames of these streams; a longer one is dropped and counted. */
   private static final int MAX_FRAME_LENGTH = 128 * 1024;
 
+  /**
+   * The adapter's counters.
+   *
+   * @return a new set of counters
+   */
   @Bean
   BinanceCounters binanceCounters() {
     return new BinanceCounters();
   }
 
-  /** Opened when the gateway starts and closed when it stops. */
+  /**
+   * Opened when the gateway starts and closed when it stops.
+   *
+   * @param properties the adapter's properties
+   * @param instruments the shard's instruments, all of them on Binance
+   * @param ingestMarketData where the decoded events go
+   * @param counters the adapter's counters
+   * @return the client, not connected yet
+   * @throws IllegalStateException if an instrument is on another venue
+   */
   @Bean(initMethod = "connect", destroyMethod = "close")
   BinanceStreamClient binanceStreamClient(
       BinanceProperties properties,
@@ -52,6 +66,12 @@ class BinanceConfiguration {
         MAX_FRAME_LENGTH);
   }
 
+  /**
+   * Publishes the adapter's counters as metrics.
+   *
+   * @param counters the adapter's counters
+   * @return the binder that registers them
+   */
   @Bean
   MeterBinder binanceMetrics(BinanceCounters counters) {
     return registry -> {

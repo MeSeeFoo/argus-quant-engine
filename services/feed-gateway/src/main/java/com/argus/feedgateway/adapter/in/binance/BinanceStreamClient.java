@@ -56,7 +56,13 @@ public final class BinanceStreamClient implements AutoCloseable {
    * Creates a client; nothing is opened until {@link #connect}.
    *
    * @param uri the stream to read, see {@link #streamUri}
+   * @param apiKey the Binance API key, never logged
+   * @param instruments the shard's instruments
+   * @param ingest where the decoded events go
+   * @param counters the adapter's counters
+   * @param clock reads the wall clock for {@code receiveTimestamp}
    * @param maxFrameLength bytes of the largest frame accepted; a longer one is dropped and counted
+   * @throws IllegalArgumentException if {@code apiKey} is blank
    */
   public BinanceStreamClient(
       URI uri,
@@ -82,6 +88,10 @@ public final class BinanceStreamClient implements AutoCloseable {
   /**
    * The combined stream of trades and top-of-book updates of every instrument: {@code
    * <base>/stream?streams=btcusdt@trade/btcusdt@bestBidAsk}.
+   *
+   * @param base the venue's WebSocket endpoint
+   * @param instruments the shard's instruments
+   * @return the URI of the combined stream
    */
   public static URI streamUri(URI base, Instruments instruments) {
     StringJoiner streams = new StringJoiner("/");
@@ -111,7 +121,11 @@ public final class BinanceStreamClient implements AutoCloseable {
                 });
   }
 
-  /** The current connection attempt, completed when the connection is open. */
+  /**
+   * The current connection attempt. Thread-safe.
+   *
+   * @return a future completed when the connection is open
+   */
   public synchronized CompletableFuture<WebSocket> connection() {
     return connection;
   }
@@ -196,6 +210,13 @@ public final class BinanceStreamClient implements AutoCloseable {
       return null;
     }
 
+    /**
+     * Decodes one complete frame, on the connection's thread. {@code frame} is only valid during
+     * this call.
+     *
+     * @param frame the buffer holding the frame, from offset 0
+     * @param length the length of the frame in bytes
+     */
     private void decode(DirectBuffer frame, int length) {
       try {
         decoder.onFrame(frame, 0, length, receiveTimestamp);
