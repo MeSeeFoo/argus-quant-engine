@@ -48,7 +48,7 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) | One model engine for alert rules and indicators | Accepted |
 | [0015](0015-built-in-models-in-java-behind-the-same-contract.md) | Built-in models in Java, behind the same contract | Accepted |
 | [0016](0016-distribute-deployments-with-a-kafka-consumer-group.md) | Distribute deployments with a Kafka consumer group | Accepted |
-| [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted |
+| [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted, amended by 0029 |
 | [0018](0018-output-policy-of-the-durable-path.md) | Output policy of the durable path | Accepted |
 | [0019](0019-a-global-panic-button-for-models.md) | A global PANIC button for models | Accepted |
 | [0020](0020-the-notification-dispatcher-only-notifies.md) | The notification dispatcher only notifies | Accepted |
@@ -60,3 +60,4 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0026](0026-regulatory-archive-for-mifid-ii.md) | Regulatory archive for MiFID II | Accepted, not implemented |
 | [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md) | The feed gateway publishes market data on both paths | Accepted |
 | [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) | The feed player records sessions from the gateway | Accepted |
+| [0029](0029-the-engine-stores-every-event-and-models-define-their-windows.md) | The engine stores every event, and models define their windows | Accepted |

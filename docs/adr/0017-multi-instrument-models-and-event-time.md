@@ -1,6 +1,6 @@
 # 0017. Multi-instrument models, chained indicators and event time
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0029](0029-the-engine-stores-every-event-and-models-define-their-windows.md)
 - **Date:** 2026-10-19
 - **Issues:** #11, #42
 
