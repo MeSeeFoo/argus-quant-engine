@@ -1,4 +1,4 @@
-package com.argus.feedgateway.utils;
+package com.argus.agent;
 
 import org.agrona.concurrent.Agent;
 import org.agrona.concurrent.AgentRunner;

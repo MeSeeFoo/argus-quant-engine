@@ -32,13 +32,14 @@ Kafka topics are declared in `infra/docker/kafka/topics.conf`; topics are never 
 | :--- | :--- | :--- |
 | `contracts/` | `argus-contracts` | SBE and Protobuf schemas, the single source of truth for messages ([`contracts/README.md`](contracts/README.md)) |
 | `libs/architecture-rules/` | `argus-architecture-rules` | ArchUnit rules every service applies with one test class |
+| `libs/agent-lifecycle/` | `argus-agent-lifecycle` | Runs an Agrona agent while the Spring context runs |
 | `libs/model-runtime/` | `argus-model-runtime` | GraalPy sandbox and the `argus` Python SDK |
 | `libs/builtin-models/` | `argus-builtin-models` | Java indicators (SMA, EMA, VWAP…), zero-allocation |
 | `services/<name>/` | `argus-<name>` | `feed-gateway`, `feed-player`, `model-engine`, `strategy-sim`, `notification-dispatcher`, `data-archiver`, `bff` |
 | `infra/docker/` | | Docker Compose for local development |
 | `docs/adr/` | | Architecture Decision Records |
 
-Only `contracts`, `libs/architecture-rules` and `services/feed-gateway` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, application.port.in, application.port.out, adapter.in, adapter.out, config}`; each adapter owns its configuration ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
+Only `contracts`, `libs/architecture-rules`, `libs/agent-lifecycle` and `services/feed-gateway` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, application.port.in, application.port.out, adapter.in, adapter.out, config}`; each adapter owns its configuration ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 
 ## Vocabulary
 
