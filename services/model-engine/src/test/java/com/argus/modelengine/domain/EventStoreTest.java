@@ -1,6 +1,5 @@
 package com.argus.modelengine.domain;
 
-import static com.argus.modelengine.domain.TestEvents.SECOND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -12,8 +11,8 @@ class EventStoreTest {
 
   @Test
   void copiesEveryFieldOfATrade() {
-    TradeStore store = new TradeStore(4, 4);
-    EventWindow<Trade> window = store.slidingCount(1);
+    TradeStore store = new TradeStore(4);
+    EventWindow<Trade> window = store.window(WindowDefinition.sliding(1));
 
     store.append(events.trade(7, 50));
 
@@ -30,8 +29,8 @@ class EventStoreTest {
 
   @Test
   void copiesEveryFieldOfATopOfBookUpdate() {
-    BestBidAskStore store = new BestBidAskStore(4, 4);
-    EventWindow<BestBidAsk> window = store.slidingCount(1);
+    BestBidAskStore store = new BestBidAskStore(4);
+    EventWindow<BestBidAsk> window = store.window(WindowDefinition.sliding(1));
 
     store.append(events.bestBidAsk(7, 50));
 
@@ -48,9 +47,9 @@ class EventStoreTest {
   }
 
   @Test
-  void reusesTheOldestObjectWhenNoWindowNeedsIt() {
-    TradeStore store = new TradeStore(3, 8);
-    EventWindow<Trade> window = store.slidingCount(2);
+  void reusesTheOldestObjectOnceFull() {
+    TradeStore store = new TradeStore(3);
+    EventWindow<Trade> window = store.window(WindowDefinition.sliding(2));
     store.append(events.trade(1, 1));
     Trade first = window.get(0);
 
@@ -61,79 +60,43 @@ class EventStoreTest {
     assertThat(store.capacity()).isEqualTo(3);
     assertThat(window.get(1)).isSameAs(first);
     assertThat(first.tradeId()).isEqualTo(4);
-    assertThat(store.lostEvents()).isZero();
   }
 
   @Test
-  void overwritesWithoutWindows() {
-    TradeStore store = new TradeStore(2, 8);
+  void keepsItsCapacityWithoutWindows() {
+    TradeStore store = new TradeStore(2);
 
     for (int i = 0; i < 10; i++) {
       store.append(events.trade(i, i));
     }
 
     assertThat(store.capacity()).isEqualTo(2);
-    assertThat(store.lostEvents()).isZero();
   }
 
   @Test
-  void growsWhileAWindowNeedsTheOldestEvent() {
-    TradeStore store = new TradeStore(2, 8);
-    EventWindow<Trade> window = store.slidingTime(10 * SECOND);
-
-    for (int i = 0; i < 5; i++) {
-      store.append(events.trade(i, i * SECOND));
-    }
-
-    assertThat(store.capacity()).isEqualTo(8);
-    assertThat(window.size()).isEqualTo(5);
-    for (int i = 0; i < 5; i++) {
-      assertThat(window.get(i).tradeId()).isEqualTo(i);
-    }
+  void rejectsAnInvalidCapacity() {
+    assertThatThrownBy(() -> new TradeStore(0)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new BestBidAskStore(-1)).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
-  void growsOnlyUpToItsMaximum() {
-    TradeStore store = new TradeStore(2, 3);
-    store.slidingTime(10 * SECOND);
+  void rejectsAWindowThatDoesNotFit() {
+    TradeStore store = new TradeStore(4);
 
-    for (int i = 0; i < 5; i++) {
-      store.append(events.trade(i, i * SECOND));
-    }
-
-    assertThat(store.capacity()).isEqualTo(3);
-    assertThat(store.lostEvents()).isEqualTo(2);
-  }
-
-  @Test
-  void stopsGrowingOnceTheWindowsFit() {
-    TradeStore store = new TradeStore(2, 1024);
-    EventWindow<Trade> window = store.slidingTime(10 * SECOND);
-
-    // One event per second: the window holds ten, so the store settles at the next doubling
-    for (int i = 0; i < 1_000; i++) {
-      store.append(events.trade(i, i * SECOND));
-    }
-
-    assertThat(store.capacity()).isEqualTo(16);
-    assertThat(window.size()).isEqualTo(10);
-    assertThat(store.lostEvents()).isZero();
-  }
-
-  @Test
-  void rejectsInvalidSizes() {
-    assertThatThrownBy(() -> new TradeStore(0, 4)).isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new BestBidAskStore(4, 3))
+    assertThatThrownBy(() -> store.window(WindowDefinition.sliding(5)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("needs 5 events but the store keeps 4");
+    assertThatThrownBy(() -> store.window(WindowDefinition.tumbling(3)))
         .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
-  void rejectsACountWindowThatCouldNeverFit() {
-    TradeStore store = new TradeStore(2, 4);
+  void acceptsWindowsThatFitExactly() {
+    TradeStore store = new TradeStore(5);
 
-    assertThatThrownBy(() -> store.slidingCount(5))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("maximum");
-    assertThatThrownBy(() -> store.tumblingCount(3)).isInstanceOf(IllegalArgumentException.class);
+    store.window(WindowDefinition.sliding(5));
+    store.window(WindowDefinition.tumbling(3));
+
+    assertThat(store.capacity()).isEqualTo(5);
   }
 }

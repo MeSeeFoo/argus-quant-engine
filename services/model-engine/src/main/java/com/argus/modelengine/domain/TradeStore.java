@@ -1,22 +1,23 @@
 package com.argus.modelengine.domain;
 
-/** Every trade of one instrument. See {@link EventStore}; only used on the evaluator thread. */
+/**
+ * The latest trades of one instrument. See {@link EventStore}; only used on the evaluator thread.
+ */
 public final class TradeStore extends EventStore<Trade> {
 
   /**
-   * Allocates the initial objects.
+   * Allocates every object the store will ever use.
    *
-   * @param initial the number of objects allocated at startup, at least 1
-   * @param maximum the most objects it may ever hold, at least {@code initial}
-   * @throws IllegalArgumentException if the sizes are not valid
+   * @param capacity how many trades it keeps, at least 1
+   * @throws IllegalArgumentException if the capacity is not positive
    */
-  public TradeStore(int initial, int maximum) {
-    super(initial, maximum, MutableTrade::new);
+  public TradeStore(int capacity) {
+    super(capacity, MutableTrade::new);
   }
 
   /**
    * Copies a trade into the store, so {@code trade} may be reused afterwards. Evaluator thread.
-   * Allocation-free unless the store grows.
+   * Allocation-free.
    *
    * @param trade the trade, valid only during this call
    */

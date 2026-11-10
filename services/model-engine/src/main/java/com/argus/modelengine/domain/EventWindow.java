@@ -3,12 +3,12 @@ package com.argus.modelengine.domain;
 import java.util.Objects;
 
 /**
- * A range of positions over an {@link EventStore}, declared by a model: it copies no events, so any
- * number of windows share the same objects (ADR 0029).
+ * A range of positions over an {@link EventStore}, declared by a model by number of events: it
+ * copies no events, so any number of windows share the same objects (ADR 0029).
  *
- * <p>Time is always {@code exchangeTimestamp}, never the system clock. Events stay in arrival order
- * and are never reordered: a late event stays where it arrived, so a replay gives the same result
- * as the original run.
+ * <p>Events stay in arrival order and are never reordered, so a replay gives the same result as the
+ * original run. The window's "now" is event time, {@code exchangeTimestamp}, never the system
+ * clock.
  *
  * <p>Used only on the evaluator thread, and read between appends to its store. Reading allocates
  * nothing. An event returned by {@link #get} is valid only during the current evaluation.
@@ -16,28 +16,29 @@ import java.util.Objects;
  * @param <E> the read-only view of the events it holds
  */
 public abstract sealed class EventWindow<E extends MarketEvent>
-    permits SlidingTimeWindow, SlidingCountWindow, TumblingWindow {
+    permits SlidingWindow, TumblingWindow {
 
   /** {@link #now} before the first event: no event has that timestamp. */
   public static final long NO_TIMESTAMP = Long.MIN_VALUE;
 
   final EventStore<E> store;
+  final int count;
   // The range a model reads: positions first (inclusive) to end (exclusive)
   long first;
   long end;
-  // The newest event time among the events this window lost
-  long lostTimestamp = NO_TIMESTAMP;
 
   private long now = NO_TIMESTAMP;
-  private long lateEvents;
+  private boolean fired;
 
   /**
    * Creates an empty window, starting at the store's next event.
    *
    * @param store the store it reads
+   * @param count the window's length, or a slice's, in events
    */
-  EventWindow(EventStore<E> store) {
+  EventWindow(EventStore<E> store, int count) {
     this.store = store;
+    this.count = count;
     this.first = store.nextPosition();
     this.end = first;
   }
@@ -49,65 +50,32 @@ public abstract sealed class EventWindow<E extends MarketEvent>
    * @param timestamp its {@code exchangeTimestamp}, in epoch nanoseconds
    */
   final void onAppend(long position, long timestamp) {
-    if (timestamp < now) {
-      lateEvents++;
-    } else {
-      now = timestamp;
-    }
-    advance(position, timestamp);
+    now = Math.max(now, timestamp);
+    fired = advance(position);
   }
 
   /**
-   * Moves this window's range. The event at {@code position} is not written yet, so only earlier
-   * positions may be read. Allocation-free.
+   * Moves this window's range to include the event at {@code position}, which is written right
+   * after this call. Allocation-free.
    *
    * @param position the new event's position
-   * @param timestamp its {@code exchangeTimestamp}, in epoch nanoseconds
+   * @return {@code true} if the window fires for this event
    */
-  abstract void advance(long position, long timestamp);
+  abstract boolean advance(long position);
 
   /**
-   * The oldest position this window still needs from the store. Never goes backwards.
+   * Whether the latest event of the store made this window fire: a sliding window fires on every
+   * event, a tumbling one when a slice closes. The evaluator checks it after each append to run the
+   * models of the window.
    *
-   * @return that position
+   * @return {@code true} until the next append to the store
    */
-  long firstNeeded() {
-    return first;
+  public final boolean hasFired() {
+    return fired;
   }
 
   /**
-   * Tells this window that the store overwrote an event it needed.
-   *
-   * @param position the lost event's position, the oldest this window held
-   * @param timestamp the lost event's {@code exchangeTimestamp}, in epoch nanoseconds
-   */
-  void onLost(long position, long timestamp) {
-    first = position + 1;
-    lostTimestamp = Math.max(lostTimestamp, timestamp);
-  }
-
-  /**
-   * The size the store must be able to reach for this window to work. Checked at startup.
-   *
-   * @return the number of events, 1 for a window whose need depends on the event rate
-   */
-  long minimumCapacity() {
-    return 1;
-  }
-
-  /**
-   * Whether the window holds everything it asked for. A window that lost events to the store's
-   * maximum reports it here; one that is still filling up is not incomplete, {@link #size} tells
-   * how much it has.
-   *
-   * @return {@code true} if no event of the current range was lost
-   */
-  public boolean isComplete() {
-    return lostTimestamp == NO_TIMESTAMP;
-  }
-
-  /**
-   * How many events the window holds.
+   * How many events the window holds: fewer than its count while it fills up.
    *
    * @return the number of events
    */
@@ -133,14 +101,5 @@ public abstract sealed class EventWindow<E extends MarketEvent>
    */
   public final long now() {
     return now;
-  }
-
-  /**
-   * Events that arrived with a timestamp older than {@link #now}.
-   *
-   * @return the count since the window was created
-   */
-  public final long lateEvents() {
-    return lateEvents;
   }
 }

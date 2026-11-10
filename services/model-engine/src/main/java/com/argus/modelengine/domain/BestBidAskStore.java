@@ -1,25 +1,24 @@
 package com.argus.modelengine.domain;
 
 /**
- * Every top-of-book update of one instrument. See {@link EventStore}; only used on the evaluator
- * thread.
+ * The latest top-of-book updates of one instrument. See {@link EventStore}; only used on the
+ * evaluator thread.
  */
 public final class BestBidAskStore extends EventStore<BestBidAsk> {
 
   /**
-   * Allocates the initial objects.
+   * Allocates every object the store will ever use.
    *
-   * @param initial the number of objects allocated at startup, at least 1
-   * @param maximum the most objects it may ever hold, at least {@code initial}
-   * @throws IllegalArgumentException if the sizes are not valid
+   * @param capacity how many updates it keeps, at least 1
+   * @throws IllegalArgumentException if the capacity is not positive
    */
-  public BestBidAskStore(int initial, int maximum) {
-    super(initial, maximum, MutableBestBidAsk::new);
+  public BestBidAskStore(int capacity) {
+    super(capacity, MutableBestBidAsk::new);
   }
 
   /**
    * Copies an update into the store, so {@code update} may be reused afterwards. Evaluator thread.
-   * Allocation-free unless the store grows.
+   * Allocation-free.
    *
    * @param update the update, valid only during this call
    */

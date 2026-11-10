@@ -6,10 +6,10 @@ import com.argus.modelengine.domain.Trade;
 import com.argus.modelengine.domain.TradeStore;
 
 /**
- * The engine's stores: one per instrument and kind of event (ADR 0029).
+ * The engine's stores: one per instrument and kind of event, each sized at startup to what its
+ * windows need (ADR 0029). The planner works the sizes out from the deployments.
  *
- * <p>Used only on the evaluator thread. Appending allocates nothing once the stores have settled at
- * the size their windows need.
+ * <p>Used only on the evaluator thread. Appending allocates nothing.
  */
 public final class MarketEventStores {
 
@@ -17,18 +17,26 @@ public final class MarketEventStores {
   private final BestBidAskStore[] bestBidAsks;
 
   /**
-   * Creates the stores of every instrument and allocates their initial objects.
+   * Creates the stores of every instrument and allocates all their objects.
    *
-   * @param instruments the number of instruments, numbered from 0
-   * @param tradeLimits the sizes of each trade store
-   * @param bestBidAskLimits the sizes of each top-of-book store
+   * @param tradeCapacities how many trades to keep, per instrument id; at least 1 each
+   * @param bestBidAskCapacities how many top-of-book updates to keep, per instrument id; at least 1
+   *     each
+   * @throws IllegalArgumentException if the arrays differ in length or a capacity is not positive
    */
-  public MarketEventStores(int instruments, Limits tradeLimits, Limits bestBidAskLimits) {
-    trades = new TradeStore[instruments];
-    bestBidAsks = new BestBidAskStore[instruments];
-    for (int i = 0; i < instruments; i++) {
-      trades[i] = new TradeStore(tradeLimits.initial(), tradeLimits.maximum());
-      bestBidAsks[i] = new BestBidAskStore(bestBidAskLimits.initial(), bestBidAskLimits.maximum());
+  public MarketEventStores(int[] tradeCapacities, int[] bestBidAskCapacities) {
+    if (tradeCapacities.length != bestBidAskCapacities.length) {
+      throw new IllegalArgumentException(
+          "one capacity per instrument for each kind of event: "
+              + tradeCapacities.length
+              + " and "
+              + bestBidAskCapacities.length);
+    }
+    trades = new TradeStore[tradeCapacities.length];
+    bestBidAsks = new BestBidAskStore[bestBidAskCapacities.length];
+    for (int i = 0; i < trades.length; i++) {
+      trades[i] = new TradeStore(tradeCapacities[i]);
+      bestBidAsks[i] = new BestBidAskStore(bestBidAskCapacities[i]);
     }
   }
 
@@ -69,12 +77,4 @@ public final class MarketEventStores {
   public BestBidAskStore bestBidAsks(int instrumentId) {
     return bestBidAsks[instrumentId];
   }
-
-  /**
-   * How many objects a store may hold.
-   *
-   * @param initial the number allocated at startup
-   * @param maximum the most it may ever hold
-   */
-  public record Limits(int initial, int maximum) {}
 }
