@@ -2,7 +2,7 @@
 
 Runs model deployments on live market data and publishes their outputs on the fast path (Aeron) and the durable path (Kafka) ([ADR 0014](../../docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md)).
 
-So far it is only the service's skeleton: it starts its agent and an Aeron driver, and has no work to do. Receiving market data, models and outputs arrive with the rest of story [2.3](https://github.com/MeSeeFoo/argus-quant-engine/issues/104), following the [design](#design) below.
+It is being built in story [2.3](https://github.com/MeSeeFoo/argus-quant-engine/issues/104), following the [design](#design) below: the reader, the stores, the windows and the model configuration exist, but are not wired yet, so the running service still has no work to do.
 
 ## Structure
 
@@ -10,7 +10,12 @@ Ports and adapters as laid out in [ADR 0009](../../docs/adr/0009-hexagonal-archi
 
 ```text
 com.argus.modelengine
-├── domain                   Trade, BestBidAsk (read-only views) and their reused objects, EventStore, EventWindow, Instruments, the reader's checks
+├── domain                   One package per concept, plain Java:
+│   ├── instrument           Instrument, Instruments (found from the wire's bytes without allocating)
+│   ├── marketdata           MarketEvent, Trade, BestBidAsk (read-only views), AggressorSide, MarketEventType
+│   ├── feed                 TradeDeduplicator, SequenceGapCounter: the reader's checks
+│   ├── window               EventStore, TradeStore, BestBidAskStore and their reused objects; EventWindow, WindowDefinition
+│   └── model                ModelConfiguration and its InputDefinitions: what a model declares
 ├── application              MarketDataReader (the reader's use case), MarketEventStores, ModelEngineAgent
 │   ├── port.in              MarketDataSource (polled by the reader), IngestMarketData (what the source hands over)
 │   └── port.out             Where data leaves (empty so far)
@@ -65,6 +70,14 @@ An agent that drains the ring through the Disruptor's `EventPoller`, so Spring s
 | Nobody uses A's trades | A, trades | 1 |
 
 **What models receive.** Each stored object is a mutable class (`MutableTrade`, `MutableBestBidAsk`) that implements a read-only interface (`Trade`, `BestBidAsk`). Models only ever see the interface, so several can share one object safely. The object is reused, so a reference is valid only during the evaluation that received it. A model that needs a value later copies the value.
+
+**What a model declares.** A [`ModelConfiguration`](src/main/java/com/argus/modelengine/domain/model/ModelConfiguration.java), immutable and built with a builder, lists its inputs. Each input names an instrument **slot**, a kind of event and a window. A slot is a name, not an instrument: a model is a template, and the instrument is chosen when it is deployed ([ADR 0014](../../docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md)). Model Z of the example:
+
+```java
+ModelConfiguration.builder()
+    .input("quotes", "asset", MarketEventType.BEST_BID_ASK, WindowDefinition.tumbling(100))
+    .build();
+```
 
 **Windows.** A model declares them, per instrument and kind of event, by number of events. A window copies no events: it is a range of positions over a store.
 
