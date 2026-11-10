@@ -71,13 +71,25 @@ An agent that drains the ring through the Disruptor's `EventPoller`, so Spring s
 
 **What models receive.** Each stored object is a mutable class (`MutableTrade`, `MutableBestBidAsk`) that implements a read-only interface (`Trade`, `BestBidAsk`). Models only ever see the interface, so several can share one object safely. The object is reused, so a reference is valid only during the evaluation that received it. A model that needs a value later copies the value.
 
-**What a model declares.** A [`ModelConfiguration`](src/main/java/com/argus/modelengine/domain/model/ModelConfiguration.java), immutable and built with a builder, lists its inputs. Each input names an instrument **slot**, a kind of event and a window. A slot is a name, not an instrument: a model is a template, and the instrument is chosen when it is deployed ([ADR 0014](../../docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md)). Model Z of the example:
+**What a model declares.** A [`ModelConfiguration`](src/main/java/com/argus/modelengine/domain/model/ModelConfiguration.java), immutable and built with a builder, lists its inputs. Each input has a name, a kind of event and a window. The name is also the slot a deployment fills with an instrument: a model is a template, and its instruments are chosen when it is deployed ([ADR 0014](../../docs/adr/0014-one-model-engine-for-alert-rules-and-indicators.md)). Model Z of the example:
 
 ```java
 ModelConfiguration.builder()
-    .input("quotes", "asset", MarketEventType.BEST_BID_ASK, WindowDefinition.tumbling(100))
+    .input("quotes", MarketEventType.BEST_BID_ASK, WindowDefinition.tumbling(100))
     .build();
 ```
+
+And a deployment of it, from configuration until the UI can create them (#112):
+
+```yaml
+deployments:
+  - id: 1
+    model: model-z
+    instruments:
+      quotes: EUREX:SAN   # input name -> instrument
+```
+
+Two inputs on the same instrument, such as a model's trades and top of book, are each bound to it.
 
 **Windows.** A model declares them, per instrument and kind of event, by number of events. A window copies no events: it is a range of positions over a store.
 

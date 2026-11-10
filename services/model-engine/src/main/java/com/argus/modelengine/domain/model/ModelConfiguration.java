@@ -4,7 +4,6 @@ import com.argus.modelengine.domain.marketdata.MarketEventType;
 import com.argus.modelengine.domain.window.WindowDefinition;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -16,9 +15,12 @@ import java.util.Set;
  *
  * <pre>{@code
  * ModelConfiguration.builder()
- *     .input("quotes", "asset", MarketEventType.BEST_BID_ASK, WindowDefinition.tumbling(100))
+ *     .input("quotes", MarketEventType.BEST_BID_ASK, WindowDefinition.tumbling(100))
  *     .build();
  * }</pre>
+ *
+ * <p>Each input's name is also what a deployment fills with an instrument, so two inputs on the
+ * same instrument, such as its trades and its top of book, are bound to it one by one.
  *
  * <p>Immutable, so safe from any thread. It is plain data, so it can be stored and read without
  * running the model's code.
@@ -56,20 +58,6 @@ public record ModelConfiguration(List<InputDefinition> inputs) {
   }
 
   /**
-   * The instrument slots the inputs use: what a deployment has to fill. Several inputs may read the
-   * same slot, such as its trades and its top of book.
-   *
-   * @return each slot once, in the order its first input was declared
-   */
-  public List<String> instrumentSlots() {
-    Set<String> slots = new LinkedHashSet<>();
-    for (InputDefinition input : inputs) {
-      slots.add(input.instrumentSlot());
-    }
-    return List.copyOf(slots);
-  }
-
-  /**
    * Builds a {@link ModelConfiguration}. Not thread-safe; a model uses it once, when it is
    * registered. Each {@link #build} returns its own copy, so the builder may go on afterwards.
    */
@@ -83,16 +71,14 @@ public record ModelConfiguration(List<InputDefinition> inputs) {
     /**
      * Adds an input.
      *
-     * @param name how the model refers to it, unique within the model
-     * @param instrumentSlot the slot whose instrument it reads, filled when deploying
+     * @param name how the model and its deployments refer to it, unique within the model
      * @param eventType trades or top-of-book updates
      * @param window how the model sees them
      * @return this builder
-     * @throws IllegalArgumentException if a name does not follow {@link InputDefinition}'s style
+     * @throws IllegalArgumentException if the name does not follow {@link InputDefinition}'s style
      */
-    public Builder input(
-        String name, String instrumentSlot, MarketEventType eventType, WindowDefinition window) {
-      inputs.add(new InputDefinition(name, instrumentSlot, eventType, window));
+    public Builder input(String name, MarketEventType eventType, WindowDefinition window) {
+      inputs.add(new InputDefinition(name, eventType, window));
       return this;
     }
 
