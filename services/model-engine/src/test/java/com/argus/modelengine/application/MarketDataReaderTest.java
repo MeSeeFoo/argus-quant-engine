@@ -4,10 +4,10 @@ import static com.argus.modelengine.application.TestMarketData.bestBidAsk;
 import static com.argus.modelengine.application.TestMarketData.trade;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.SequenceGapCounter;
-import com.argus.modelengine.domain.Trade;
-import com.argus.modelengine.domain.TradeDeduplicator;
+import com.argus.modelengine.domain.feed.SequenceGapCounter;
+import com.argus.modelengine.domain.feed.TradeDeduplicator;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;

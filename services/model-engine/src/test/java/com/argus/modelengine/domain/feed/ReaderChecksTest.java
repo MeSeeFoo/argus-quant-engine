@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.feed;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

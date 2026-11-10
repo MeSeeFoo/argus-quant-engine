@@ -1,4 +1,6 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.MarketEvent;
 
 /**
  * The last {@code count} events, or fewer while it fills up. Fires on every event.

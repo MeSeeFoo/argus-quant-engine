@@ -1,4 +1,7 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.AggressorSide;
+import com.argus.modelengine.domain.marketdata.Trade;
 
 /**
  * The stored form of a {@link Trade}: pre-allocated and overwritten when {@link TradeStore} reuses

@@ -1,7 +1,7 @@
 package com.argus.modelengine.application.port.in;
 
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.Trade;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 
 /**
  * What an inbound adapter hands over for each message it decodes (ADR 0009).

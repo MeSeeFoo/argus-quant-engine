@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.instrument;
 
 /**
  * An instrument as the venue names it ({@code BINANCE:BTCUSDT}). Venue and symbol are uppercase

@@ -1,5 +1,6 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
 
+import com.argus.modelengine.domain.marketdata.MarketEvent;
 import java.util.Arrays;
 import java.util.function.Supplier;
 

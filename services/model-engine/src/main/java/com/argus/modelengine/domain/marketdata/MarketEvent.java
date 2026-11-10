@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.marketdata;
 
 /**
  * What every market data event has, read-only.
@@ -10,7 +10,8 @@ package com.argus.modelengine.domain;
 public interface MarketEvent {
 
   /**
-   * The instrument of this event, as numbered by {@link Instruments}.
+   * The instrument of this event, as numbered by {@link
+   * com.argus.modelengine.domain.instrument.Instruments}.
    *
    * @return its index in the engine's instruments
    */

@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.instrument;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

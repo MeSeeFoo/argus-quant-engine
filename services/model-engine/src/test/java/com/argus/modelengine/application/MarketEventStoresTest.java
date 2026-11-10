@@ -5,10 +5,10 @@ import static com.argus.modelengine.application.TestMarketData.trade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.EventWindow;
-import com.argus.modelengine.domain.Trade;
-import com.argus.modelengine.domain.WindowDefinition;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
+import com.argus.modelengine.domain.window.EventWindow;
+import com.argus.modelengine.domain.window.WindowDefinition;
 import org.junit.jupiter.api.Test;
 
 class MarketEventStoresTest {

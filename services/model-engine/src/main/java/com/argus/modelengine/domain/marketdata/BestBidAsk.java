@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.marketdata;
 
 /**
  * A top-of-book update, read-only. Prices and quantities are {@code Decimal64} mantissas (scale

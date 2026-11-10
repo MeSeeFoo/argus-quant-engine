@@ -1,4 +1,6 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.MarketEvent;
 
 /**
  * Slices of {@code count} events that do not overlap. {@link #size} and {@link #get} read the last

@@ -1,4 +1,8 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.AggressorSide;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 
 /** Reusable sources of events for the tests: each call overwrites the same object. */
 final class TestEvents {

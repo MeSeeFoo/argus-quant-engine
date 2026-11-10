@@ -1,4 +1,6 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
 
 /**
  * The stored form of a {@link BestBidAsk}: pre-allocated and overwritten when {@link

@@ -1,10 +1,10 @@
 package com.argus.modelengine.application;
 
 import com.argus.modelengine.application.port.in.IngestMarketData;
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.SequenceGapCounter;
-import com.argus.modelengine.domain.Trade;
-import com.argus.modelengine.domain.TradeDeduplicator;
+import com.argus.modelengine.domain.feed.SequenceGapCounter;
+import com.argus.modelengine.domain.feed.TradeDeduplicator;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 import java.util.function.Consumer;
 
 /**

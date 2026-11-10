@@ -1,8 +1,11 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.argus.modelengine.domain.marketdata.AggressorSide;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 import org.junit.jupiter.api.Test;
 
 class EventStoreTest {

@@ -1,7 +1,13 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.argus.modelengine.domain.feed.SequenceGapCounter;
+import com.argus.modelengine.domain.feed.TradeDeduplicator;
+import com.argus.modelengine.domain.instrument.Instrument;
+import com.argus.modelengine.domain.instrument.Instruments;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;

@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
 
 /**
  * A window as a model declares it, by number of events (ADR 0029). Immutable, so safe from any

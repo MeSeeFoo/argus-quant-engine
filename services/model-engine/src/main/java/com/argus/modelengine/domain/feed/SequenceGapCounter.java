@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.feed;
 
 import java.util.concurrent.atomic.AtomicLong;
 

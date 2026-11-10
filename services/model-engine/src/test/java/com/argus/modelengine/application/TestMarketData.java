@@ -1,8 +1,8 @@
 package com.argus.modelengine.application;
 
-import com.argus.modelengine.domain.AggressorSide;
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.Trade;
+import com.argus.modelengine.domain.marketdata.AggressorSide;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
 
 /** Events with the values a test needs. Records, so their getters implement the interfaces. */
 final class TestMarketData {

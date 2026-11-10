@@ -1,4 +1,6 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.window;
+
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
 
 /**
  * The latest top-of-book updates of one instrument. See {@link EventStore}; only used on the

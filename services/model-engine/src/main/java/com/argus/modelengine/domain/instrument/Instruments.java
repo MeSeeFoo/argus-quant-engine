@@ -1,4 +1,4 @@
-package com.argus.modelengine.domain;
+package com.argus.modelengine.domain.instrument;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;

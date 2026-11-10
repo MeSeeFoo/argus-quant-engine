@@ -1,9 +1,9 @@
 package com.argus.modelengine.application;
 
-import com.argus.modelengine.domain.BestBidAsk;
-import com.argus.modelengine.domain.BestBidAskStore;
-import com.argus.modelengine.domain.Trade;
-import com.argus.modelengine.domain.TradeStore;
+import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.Trade;
+import com.argus.modelengine.domain.window.BestBidAskStore;
+import com.argus.modelengine.domain.window.TradeStore;
 
 /**
  * The engine's stores: one per instrument and kind of event, each sized at startup to what its
