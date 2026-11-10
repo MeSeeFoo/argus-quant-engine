@@ -26,9 +26,9 @@ Spring builds the objects and starts the agent on its own thread through [`argus
 
 ## Design
 
-This is the initial design, written before the code and refined as it is built: **none of it exists yet**. Class and property names are provisional. The decisions and the alternatives discarded are in [ADR 0029](../../docs/adr/0029-the-engine-stores-every-event-and-models-define-their-windows.md).
+The design of story 2.3, written before the code and refined as it is built. The reader, the stores and the windows exist (#111); the planner, the model contract and the outputs do not yet. The decisions and the alternatives discarded are in [ADR 0029](../../docs/adr/0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md).
 
-The engine keeps every trade and every top-of-book update it receives. Each model declares the windows it wants over them, and how often it wants to be evaluated.
+Each model declares the windows it wants: over which instrument, which kind of event, and how many events. From that the engine works out at startup what to keep, and wakes each model when one of its windows fires.
 
 ```text
 reader thread                   Disruptor          evaluator thread
@@ -54,22 +54,27 @@ One ring of reused slots, with one producer and one consumer, carries trades and
 
 An agent that drains the ring through the Disruptor's `EventPoller`, so Spring starts it like any other agent. The stores, the windows and the models are used only on this thread, so they need no locks.
 
-**Stores.** One per instrument and kind of event: trades, and top of book. Each one holds every event in arrival order, in pre-allocated objects.
+**Stores.** One per instrument and kind of event: trades, and top of book. Each one keeps the latest events in arrival order, in pre-allocated objects, as many as its windows need and no more. The size is fixed at startup, so a store never grows and never overwrites an event that a window still needs.
 
-- `initial` and `maximum`, configured per kind, limit the number of objects.
-- The oldest object is overwritten when no window needs it any more. If a window still needs it, the store grows, up to `maximum`. Growing allocates, but only until the store reaches the size its windows need.
-- At `maximum` the oldest object is overwritten anyway, and the windows that needed it report that they are incomplete.
+**The planner** reads the deployments at startup and sizes the stores (#112). A sliding window of N events needs N; a tumbling window of N needs 2N − 1, because its last closed slice stays readable while the next one fills. A store nobody uses keeps a single object. For example:
+
+| Deployment | Store | Size |
+| :--- | :--- | :--- |
+| Model Z: tumbling window of 100 on A's top of book | A, top of book | 199 |
+| Model Y: every update of B | B, trades and B, top of book | 1 each |
+| Nobody uses A's trades | A, trades | 1 |
 
 **What models receive.** Each stored object is a mutable class (`MutableTrade`, `MutableBestBidAsk`) that implements a read-only interface (`Trade`, `BestBidAsk`). Models only ever see the interface, so several can share one object safely. The object is reused, so a reference is valid only during the evaluation that received it. A model that needs a value later copies the value.
 
-**Windows.** A model declares them, per instrument and kind of event. A window copies no events: it is a range of positions over a store.
+**Windows.** A model declares them, per instrument and kind of event, by number of events. A window copies no events: it is a range of positions over a store.
 
-- By time or by number of events, sliding or tumbling.
-- Time is always `exchangeTimestamp`, never the system clock. A window's "now" is the latest timestamp of its input and never goes backwards.
-- Events are never reordered: a late event stays where it arrived, so a replay gives the same result as the original run.
-- Bars are something a model may build from a window if it wants them. Another model can work on every tick instead, such as a mid price on each top-of-book update.
+- **Sliding:** the last N events. It fires on every event.
+- **Tumbling:** slices of N events that do not overlap. The model reads the last closed slice, and the window fires when a slice closes.
+- Windows by time are left for when a model needs them.
+- A window's "now" is the latest `exchangeTimestamp` of its input, never the system clock, and never goes backwards. Events are never reordered, so a replay gives the same result as the original run.
+- Bars are something a model may build from a window if it wants them. Another model can work on every tick instead, such as a mid price on each top-of-book update: a sliding window of one event.
 
-**Evaluation.** Each deployment chooses how often it runs: on every event of its inputs (the default), every N events, or every T of event time. A time-based evaluation only fires when an event arrives. A deployment on several instruments uses the latest value of the others and is told how old each one is ([ADR 0017](../../docs/adr/0017-multi-instrument-models-and-event-time.md)).
+**Evaluation.** A deployment runs when one of its windows fires, on the evaluator thread, through a `ModelRunner` interface (#112). In the example, model Z runs every 100 top-of-book updates of A, and model Y on every trade and top-of-book update of B. A deployment on several instruments reads its other inputs as they are at that moment, and is told how old each one is ([ADR 0017](../../docs/adr/0017-multi-instrument-models-and-event-time.md)). The built-in models take microseconds; Python models, which may be slow or hang, will get an agent of their own in Phase 3 (see the ADR).
 
 **Outputs.** Every `IndicatorValue` goes out on Aeron. For Kafka, the evaluator copies it into a ring drained by a separate sender, which conflates per deployment and instrument on a monotonic clock, as it only limits how often the topic is written ([ADR 0018](../../docs/adr/0018-output-policy-of-the-durable-path.md)). Kafka never delays the evaluator ([ADR 0005](../../docs/adr/0005-the-engine-never-blocks-on-kafka.md)).
 
@@ -78,7 +83,7 @@ An agent that drains the ring through the Disruptor's `EventPoller`, so Spring s
 | Task | What it builds |
 | :--- | :--- |
 | [#111](https://github.com/MeSeeFoo/argus-quant-engine/issues/111) | The reader, the Disruptor hand-off, the stores and the windows |
-| [#112](https://github.com/MeSeeFoo/argus-quant-engine/issues/112) | The model contract, deployments from configuration, and when each one is evaluated |
+| [#112](https://github.com/MeSeeFoo/argus-quant-engine/issues/112) | The model contract, deployments from configuration, the planner that sizes the stores, and running each model when its windows fire |
 | [#113](https://github.com/MeSeeFoo/argus-quant-engine/issues/113) | Outputs on Aeron |
 | [#114](https://github.com/MeSeeFoo/argus-quant-engine/issues/114) | Conflated outputs to Kafka |
 

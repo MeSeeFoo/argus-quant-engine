@@ -60,4 +60,4 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0026](0026-regulatory-archive-for-mifid-ii.md) | Regulatory archive for MiFID II | Accepted, not implemented |
 | [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md) | The feed gateway publishes market data on both paths | Accepted |
 | [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) | The feed player records sessions from the gateway | Accepted |
-| [0029](0029-the-engine-stores-every-event-and-models-define-their-windows.md) | The engine stores every event, and models define their windows | Accepted |
+| [0029](0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md) | Models declare their windows, and the engine keeps what they need | Accepted |

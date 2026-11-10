@@ -129,7 +129,7 @@ Models are templates: their instruments are left open, as named **slots**, and f
 ### Hot path
 
 - **Single-threaded agents** (Agrona `AgentRunner`), each on its own thread with a back-off idle strategy (threads cannot be pinned on Fargate). Locks are never taken on the hot path.
-- **Zero allocation in steady state.** The engine stores every event in pre-allocated, reused objects, and a model's windows are positions over them ([ADR 0029](docs/adr/0029-the-engine-stores-every-event-and-models-define-their-windows.md)). No boxed collections. SBE flyweights decode messages without creating objects. Allocation rate is checked with JFR.
+- **Zero allocation in steady state.** The engine keeps the events its models need in pre-allocated, reused objects, and a model's windows are positions over them ([ADR 0029](docs/adr/0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md)). No boxed collections. SBE flyweights decode messages without creating objects. Allocation rate is checked with JFR.
 - **Event time.** Windows and the models' notion of "now" use the events' exchange timestamps, never the system clock, so replays and backtests give the same results as live runs.
 - **Kafka is decoupled** through an Agrona ring buffer and a separate publisher agent (see above).
 - **GC:** Generational ZGC, so that the remaining pauses stay short.
