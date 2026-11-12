@@ -7,11 +7,11 @@ import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 
 /**
- * The fixed layout of a {@link BestBidAsk} in a slot of the Kafka adapter: copies its fields in and
- * out, without allocating. Like {@link KafkaTradeSlot}, a slot carries the {@code sequence} the
- * update was published with, and the instrument as its id in {@link Instruments}.
+ * The fixed layout of a {@link BestBidAsk} in a slot of the Kafka adapter's ring buffer: copies its
+ * fields in and out, without allocating. Like {@link TradeCodec}, a slot carries the {@code
+ * sequence} the update was published with, and the instrument as its id in {@link Instruments}.
  */
-final class KafkaBidAskSlot {
+final class BestBidAskCodec {
 
   private static final int SEQUENCE = 0;
   private static final int BOOK_UPDATE_ID = SEQUENCE + Long.BYTES;
@@ -29,7 +29,7 @@ final class KafkaBidAskSlot {
   // Values in a slot are canonical already: read back as decimals with the canonical exponent
   private static final int CANONICAL = -Decimal64.SCALE;
 
-  private KafkaBidAskSlot() {}
+  private BestBidAskCodec() {}
 
   /**
    * Writes {@code book}, published with {@code sequence}, at {@code index}. Its instrument must

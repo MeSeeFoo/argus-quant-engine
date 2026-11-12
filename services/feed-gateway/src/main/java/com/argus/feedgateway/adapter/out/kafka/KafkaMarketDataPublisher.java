@@ -1,5 +1,6 @@
 package com.argus.feedgateway.adapter.out.kafka;
 
+import com.argus.feedgateway.adapter.out.kafka.mapping.ProtobufMappers;
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instruments;
@@ -32,9 +33,9 @@ import org.springframework.kafka.support.ProducerListener;
  * ADR 0027).
  *
  * <p>Two threads, one ring buffer between them. The gateway agent only copies each event into the
- * ring ({@link KafkaTradeSlot}, {@link KafkaBidAskSlot}), without allocating, and drops and counts
- * it when the ring is full. The publisher thread drains the ring. It maps each trade to Protobuf
- * and hands it to the {@link KafkaTemplate}, which may block or allocate on that thread only.
+ * ring ({@link TradeCodec}, {@link BestBidAskCodec}), without allocating, and drops and counts it
+ * when the ring is full. The publisher thread drains the ring. It maps each trade to Protobuf and
+ * hands it to the {@link KafkaTemplate}, which may block or allocate on that thread only.
  *
  * <p>A top of book is not sent when drained: it overwrites its instrument's pre-allocated slot, and
  * every interval the slots that changed are sent. The interval is measured on a monotonic clock, so
@@ -108,23 +109,23 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
 
   @Override
   public void publishTrade(Trade trade, long sequence) {
-    int index = events.tryClaim(TRADE, KafkaTradeSlot.LENGTH);
+    int index = events.tryClaim(TRADE, TradeCodec.LENGTH);
     if (index < 0) {
       kafkaCounters.countDroppedRingFull();
       return;
     }
-    KafkaTradeSlot.write(events.buffer(), index, sequence, trade);
+    TradeCodec.write(events.buffer(), index, sequence, trade);
     events.commit(index);
   }
 
   @Override
   public void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence) {
-    int index = events.tryClaim(BEST_BID_ASK, KafkaBidAskSlot.LENGTH);
+    int index = events.tryClaim(BEST_BID_ASK, BestBidAskCodec.LENGTH);
     if (index < 0) {
       kafkaCounters.countDroppedRingFull();
       return;
     }
-    KafkaBidAskSlot.write(events.buffer(), index, sequence, bestBidAsk);
+    BestBidAskCodec.write(events.buffer(), index, sequence, bestBidAsk);
     events.commit(index);
   }
 
@@ -187,11 +188,11 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
     try {
       switch (type) {
         case TRADE -> {
-          KafkaTradeSlot.read(buffer, index, instruments, reusedTrade);
+          TradeCodec.read(buffer, index, instruments, reusedTrade);
           sendTradeToKafka(reusedTrade, sequence);
         }
         case BEST_BID_ASK -> {
-          KafkaBidAskSlot.read(buffer, index, instruments, reusedBestBidAsk);
+          BestBidAskCodec.read(buffer, index, instruments, reusedBestBidAsk);
           conflateEvent(reusedBestBidAsk, sequence);
         }
       }

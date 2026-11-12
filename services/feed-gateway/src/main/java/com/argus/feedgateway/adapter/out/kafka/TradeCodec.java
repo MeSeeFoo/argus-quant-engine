@@ -15,7 +15,7 @@ import org.agrona.MutableDirectBuffer;
  * <p>The instrument is stored as its {@linkplain com.argus.feedgateway.domain.Instrument#id id},
  * and read back from {@link Instruments}, which already holds its venue and symbol.
  */
-final class KafkaTradeSlot {
+final class TradeCodec {
 
   // The longs first, so they stay aligned
   private static final int SEQUENCE = 0;
@@ -36,7 +36,7 @@ final class KafkaTradeSlot {
   private static final byte BUY = 0;
   private static final byte SELL = 1;
 
-  private KafkaTradeSlot() {}
+  private TradeCodec() {}
 
   /**
    * Writes {@code trade}, published with {@code sequence}, at {@code index}. Its instrument must

@@ -3,6 +3,7 @@ package com.argus.feedgateway.adapter.out.kafka;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.argus.feedgateway.adapter.out.kafka.mapping.ProtobufMappers;
 import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
