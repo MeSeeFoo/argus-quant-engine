@@ -69,6 +69,9 @@
         <snappy-java.version>1.1.10.12</snappy-java.version>
         <!-- Same for Guava, brought by Apicurio through Wire (GHSA-xxph-c9ww-hj94). Remove once Apicurio ships 33.7.2 or newer. -->
         <guava.version>33.8.0-jre</guava.version>
+        <!-- Same for org.json, brought by Apicurio through jackson-datatype-json-org (GHSA-ghc9-756g-vrcv).
+             Remove once Apicurio ships 20260719 or newer. -->
+        <org-json.version>20260814</org-json.version>
         <!-- Overrides the version managed by Spring Boot (GHSA-ccrj-gw8r-854m). Remove once Spring Boot manages 1.67.0 or newer. -->
         <opentelemetry.version>1.68.0</opentelemetry.version>
 
@@ -178,7 +181,7 @@
                 <version>${apicurio-registry.version}</version>
             </dependency>
 
-            <!-- Security overrides, see lz4-java.version, snappy-java.version and guava.version -->
+            <!-- Security overrides, see lz4-java.version, snappy-java.version, guava.version and org-json.version -->
             <dependency>
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
@@ -193,6 +196,11 @@
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
                 <version>${guava.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.json</groupId>
+                <artifactId>json</artifactId>
+                <version>${org-json.version}</version>
             </dependency>
 
             <!-- Nullness annotations (@Nullable) checked by NullAway -->
