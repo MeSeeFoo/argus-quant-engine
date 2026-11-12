@@ -49,17 +49,16 @@ class KafkaUnreachableTest {
     factory.setPhysicalCloseTimeout(1);
     var counters = new KafkaCounters();
     var template = new KafkaTemplate<>(factory);
-    template.setProducerListener(new KafkaMarketDataPublisher.MetricProducerListener<>(counters));
+    template.setProducerListener(new CountingProducerListener<>(counters));
     var instruments = new Instruments(List.of(new Instrument("BINANCE", "BTCUSDT")));
-    var kafka =
-        new KafkaMarketDataPublisher(
-            template,
-            // A small ring, so it fills while the sender is stuck
-            new KafkaProperties(
-                "trades", "quotes", Duration.ofMillis(1), 4 * 1024, Duration.ofSeconds(1)),
-            instruments,
-            counters,
-            new SystemNanoClock());
+    // A small ring, so it fills while the sender is stuck
+    var properties =
+        new KafkaProperties(
+            "trades", "quotes", Duration.ofMillis(1), 4 * 1024, Duration.ofSeconds(1));
+    var kafka = new KafkaMarketDataPublisher(properties.bufferCapacity(), counters);
+    var kafkaSender =
+        new KafkaSenderAgent(
+            kafka.events(), template, properties, instruments, counters, new SystemNanoClock());
     var fastPath = new RecordingPublisher();
     var relay =
         new MarketDataRelay(
@@ -77,7 +76,7 @@ class KafkaUnreachableTest {
             new SleepingIdleStrategy(Duration.ofMillis(1).toNanos()),
             Throwable::printStackTrace,
             null,
-            kafka.messageSenderAgent());
+            kafkaSender);
     AgentRunner.startOnThread(sender);
     long elapsed;
     try {

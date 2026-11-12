@@ -18,9 +18,10 @@ import org.springframework.kafka.support.ProducerListener;
  * to Kafka. It owns its properties ({@code argus.feed-gateway.kafka.*}); the {@code KafkaTemplate}
  * comes from Spring Boot, configured with {@code spring.kafka.*}.
  *
- * <p>The counters are a bean of their own because two beans write them: the publisher, and the
- * {@code ProducerListener} that Spring Boot plugs into the template the publisher needs. Taking
- * them from the publisher would make the template depend on the publisher, and the other way round.
+ * <p>The counters are a bean of their own because several beans write them: the publisher, the
+ * sender, and the {@code ProducerListener} that Spring Boot plugs into the template the sender
+ * needs. Taking them from the sender would make the template depend on the sender, and the other
+ * way round.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(KafkaProperties.class)
@@ -44,20 +45,14 @@ class KafkaConfiguration {
   /**
    * Plain Java: Spring only creates it. The gateway agent calls it directly (ADR 0010).
    *
-   * @param kafkaTemplate the template Spring Boot configures with {@code spring.kafka.*}
    * @param properties the adapter's properties
-   * @param instruments the shard's instruments
    * @param kafkaCounters the adapter's counters
    * @return the publisher
    */
   @Bean
   KafkaMarketDataPublisher kafkaMarketDataPublisher(
-      KafkaTemplate<String, Message> kafkaTemplate,
-      KafkaProperties properties,
-      Instruments instruments,
-      KafkaCounters kafkaCounters) {
-    return new KafkaMarketDataPublisher(
-        kafkaTemplate, properties, instruments, kafkaCounters, new SystemNanoClock());
+      KafkaProperties properties, KafkaCounters kafkaCounters) {
+    return new KafkaMarketDataPublisher(properties.bufferCapacity(), kafkaCounters);
   }
 
   /**
@@ -69,20 +64,34 @@ class KafkaConfiguration {
    */
   @Bean
   ProducerListener<Object, Object> kafkaProducerListener(KafkaCounters kafkaCounters) {
-    return new KafkaMarketDataPublisher.MetricProducerListener<>(kafkaCounters);
+    return new CountingProducerListener<>(kafkaCounters);
   }
 
   /**
    * The thread that drains the publisher's ring buffer into Kafka, from start to shutdown.
    *
-   * @param properties the adapter's properties
    * @param publisher the publisher whose ring buffer it drains
+   * @param kafkaTemplate the template Spring Boot configures with {@code spring.kafka.*}
+   * @param properties the adapter's properties
+   * @param instruments the shard's instruments
+   * @param kafkaCounters the adapter's counters
    * @return the agent's lifecycle, started by Spring
    */
   @Bean
-  AgentLifecycle kafkaSenderAgent(KafkaProperties properties, KafkaMarketDataPublisher publisher) {
+  AgentLifecycle kafkaSenderAgent(
+      KafkaMarketDataPublisher publisher,
+      KafkaTemplate<String, Message> kafkaTemplate,
+      KafkaProperties properties,
+      Instruments instruments,
+      KafkaCounters kafkaCounters) {
     return new AgentLifecycle(
-        publisher.messageSenderAgent(),
+        new KafkaSenderAgent(
+            publisher.events(),
+            kafkaTemplate,
+            properties,
+            instruments,
+            kafkaCounters,
+            new SystemNanoClock()),
         // Parks in nanoseconds, so a sleep below a millisecond is not rounded to zero
         new SleepingIdleStrategy(properties.senderIdleSleep().toNanos()),
         SENDER_PHASE);

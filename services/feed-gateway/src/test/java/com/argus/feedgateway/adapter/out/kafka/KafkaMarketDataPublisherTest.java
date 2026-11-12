@@ -3,6 +3,7 @@ package com.argus.feedgateway.adapter.out.kafka;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.argus.feedgateway.adapter.out.kafka.mapping.ProtobufMappers;
 import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
@@ -21,7 +22,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.mock.MockProducerFactory;
 
-/** Runs against Kafka's {@code MockProducer}: a real template, no broker. */
+/**
+ * The publisher and its sender together, as the adapter runs them, against Kafka's {@code
+ * MockProducer}: a real template, no broker. Both run on the test's thread.
+ */
 class KafkaMarketDataPublisherTest {
 
   private static final Instruments INSTRUMENTS =
@@ -32,7 +36,7 @@ class KafkaMarketDataPublisherTest {
   private static final String QUOTES = "argus.market.quotes.v1";
   private static final Duration INTERVAL = Duration.ofSeconds(1);
 
-  // What the publisher's clock says: only the test moves it
+  // What the sender's clock says: only the test moves it
   private long nanos;
   private final NanoClock clock = () -> nanos;
   // Not auto-completed: each test acknowledges or fails the records itself
@@ -40,10 +44,13 @@ class KafkaMarketDataPublisherTest {
   private final KafkaCounters counters = new KafkaCounters();
   private final KafkaTemplate<String, Message> template =
       new KafkaTemplate<>(new MockProducerFactory<>(() -> producer));
-  private final KafkaMarketDataPublisher publisher = publisher(64 * 1024);
+  // A pair over one ring; a test that needs other instruments or capacity connects a new one
+  private KafkaMarketDataPublisher publisher;
+  private KafkaSenderAgent sender;
 
   KafkaMarketDataPublisherTest() {
-    template.setProducerListener(new KafkaMarketDataPublisher.MetricProducerListener<>(counters));
+    template.setProducerListener(new CountingProducerListener<>(counters));
+    connect(INSTRUMENTS, 64 * 1024);
   }
 
   @Test
@@ -51,14 +58,14 @@ class KafkaMarketDataPublisherTest {
     publisher.publishTrade(trade(1), 1);
 
     assertThat(producer.history()).as("the gateway agent only copies into the ring").isEmpty();
-    assertThat(publisher.sendBufferedEventsToKafka()).isEqualTo(1);
+    assertThat(sender.doWork()).isEqualTo(1);
     assertThat(producer.history()).hasSize(1);
   }
 
   @Test
   void sendsTradesToTheirTopicKeyedByInstrument() {
     publisher.publishTrade(trade(42), 1);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     ProducerRecord<String, Message> trade = producer.history().getFirst();
     assertThat(trade.topic()).isEqualTo(TRADES);
@@ -72,13 +79,11 @@ class KafkaMarketDataPublisherTest {
   @Test
   void sendsTheTopOfBookToItsTopicKeyedByInstrument() {
     publisher.publishBestBidAsk(book(7), 1);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(producer.history()).as("it waits for the interval").isEmpty();
     nanos += INTERVAL.toNanos();
-    assertThat(publisher.sendBufferedEventsToKafka())
-        .as("no more events, one flushed")
-        .isEqualTo(1);
+    assertThat(sender.doWork()).as("no more events, one flushed").isEqualTo(1);
 
     ProducerRecord<String, Message> book = producer.history().getFirst();
     assertThat(book.topic()).isEqualTo(QUOTES);
@@ -91,10 +96,10 @@ class KafkaMarketDataPublisherTest {
     publisher.publishBestBidAsk(book(1), 10);
     publisher.publishBestBidAsk(book(2), 11);
     publisher.publishBestBidAsk(book(3), 12);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(producer.history())
         .singleElement()
@@ -105,42 +110,42 @@ class KafkaMarketDataPublisherTest {
   @Test
   void sendsNoTopOfBookIfNothingChangedSinceTheLastOne() {
     publisher.publishBestBidAsk(book(1), 1);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     nanos += 5 * INTERVAL.toNanos();
 
-    assertThat(publisher.sendBufferedEventsToKafka()).isZero();
+    assertThat(sender.doWork()).isZero();
     assertThat(producer.history()).hasSize(1);
   }
 
   @Test
   void sendsATopOfBookAtMostOncePerInterval() {
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka(); // the interval starts here, with nothing to send
+    sender.doWork(); // the interval starts here, with nothing to send
 
     publisher.publishBestBidAsk(book(1), 1);
     nanos += INTERVAL.toNanos() - 1;
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).as("one nanosecond early").isEmpty();
 
     nanos += 1;
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).hasSize(1);
   }
 
   @Test
   void measuresTheIntervalWhateverValueTheClockStartsAt() {
     nanos = -5 * INTERVAL.toNanos(); // nanoTime may well be negative
-    KafkaMarketDataPublisher negative = publisher(INSTRUMENTS, 64 * 1024);
-    negative.publishBestBidAsk(book(1), 1);
+    connect(INSTRUMENTS, 64 * 1024);
+    publisher.publishBestBidAsk(book(1), 1);
 
-    negative.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).isEmpty();
 
     nanos += INTERVAL.toNanos();
-    negative.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).hasSize(1);
   }
 
@@ -149,16 +154,16 @@ class KafkaMarketDataPublisherTest {
     var instruments =
         new Instruments(
             List.of(new Instrument("BINANCE", "BTCUSDT"), new Instrument("BINANCE", "ETHUSDT")));
-    KafkaMarketDataPublisher two = publisher(instruments, 64 * 1024);
+    connect(instruments, 64 * 1024);
     BestBidAsk latestBtc = book(2).instrument(instruments.get(0));
     BestBidAsk latestEth = book(3).instrument(instruments.get(1));
-    two.publishBestBidAsk(book(1).instrument(instruments.get(0)), 1);
-    two.publishBestBidAsk(latestBtc, 2);
-    two.publishBestBidAsk(latestEth, 3);
-    two.sendBufferedEventsToKafka();
+    publisher.publishBestBidAsk(book(1).instrument(instruments.get(0)), 1);
+    publisher.publishBestBidAsk(latestBtc, 2);
+    publisher.publishBestBidAsk(latestEth, 3);
+    sender.doWork();
 
     nanos += INTERVAL.toNanos();
-    two.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(producer.history())
         .extracting(ProducerRecord::key, ProducerRecord::value)
@@ -167,10 +172,10 @@ class KafkaMarketDataPublisherTest {
             tuple("BINANCE:ETHUSDT", ProtobufMappers.bestBidAsk(latestEth, 3)));
 
     // Only the one that changes goes out next
-    two.publishBestBidAsk(latestEth.bookUpdateId(4), 4);
-    two.sendBufferedEventsToKafka();
+    publisher.publishBestBidAsk(latestEth.bookUpdateId(4), 4);
+    sender.doWork();
     nanos += INTERVAL.toNanos();
-    two.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(producer.history()).hasSize(3);
     assertThat(producer.history().getLast().key()).isEqualTo("BINANCE:ETHUSDT");
@@ -182,7 +187,7 @@ class KafkaMarketDataPublisherTest {
     publisher.publishTrade(trade(1), 2);
     publisher.publishTrade(trade(2), 3);
 
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(producer.history())
         .extracting(ProducerRecord::topic)
@@ -192,19 +197,19 @@ class KafkaMarketDataPublisherTest {
   @Test
   void countsATopOfBookThatCannotBeHandedToKafkaAndGoesOn() {
     publisher.publishBestBidAsk(book(1), 1);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     producer.sendException = new KafkaException("serialization failed");
 
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(counters.failedSending()).isEqualTo(1);
 
     producer.sendException = null;
     publisher.publishBestBidAsk(book(2), 2);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).as("the next one goes through").hasSize(1);
   }
 
@@ -214,7 +219,7 @@ class KafkaMarketDataPublisherTest {
     publisher.publishBestBidAsk(book(1), 1);
     publisher.publishBestBidAsk(book(2), 2);
 
-    publisher.messageSenderAgent().onClose();
+    sender.onClose();
 
     assertThat(producer.history())
         .singleElement()
@@ -242,21 +247,21 @@ class KafkaMarketDataPublisherTest {
         }
         long before = threads.getCurrentThreadAllocatedBytes();
         // Until empty: where the ring wraps, one call reads less than a whole batch
-        while (publisher.sendBufferedEventsToKafka() > 0) {}
+        while (sender.doWork() > 0) {}
         conflating += threads.getCurrentThreadAllocatedBytes() - before;
       }
     }
     assertThat(producer.history()).as("the clock never moved").isEmpty();
 
     nanos += INTERVAL.toNanos();
-    publisher.sendBufferedEventsToKafka(); // sends the latest, which may allocate
+    sender.doWork(); // sends the latest, which may allocate
 
     int flushes = 10_000;
     long emptyFlushes = 0;
     for (int i = 0; i < flushes; i++) {
       nanos += INTERVAL.toNanos();
       long before = threads.getCurrentThreadAllocatedBytes();
-      publisher.sendBufferedEventsToKafka();
+      sender.doWork();
       emptyFlushes += threads.getCurrentThreadAllocatedBytes() - before;
     }
     assertThat(producer.history()).as("nothing else changed").hasSize(1);
@@ -274,21 +279,21 @@ class KafkaMarketDataPublisherTest {
       publisher.publishTrade(trade(i), i);
     }
 
-    assertThat(publisher.sendBufferedEventsToKafka()).isEqualTo(64);
-    assertThat(publisher.sendBufferedEventsToKafka()).isEqualTo(36);
-    assertThat(publisher.sendBufferedEventsToKafka()).isZero();
+    assertThat(sender.doWork()).isEqualTo(64);
+    assertThat(sender.doWork()).isEqualTo(36);
+    assertThat(sender.doWork()).isZero();
   }
 
   @Test
   void dropsAndCountsWhenTheRingIsFullInsteadOfBlocking() {
-    KafkaMarketDataPublisher small = publisher(1024);
+    connect(INSTRUMENTS, 1024);
     int published = 100;
     for (int i = 1; i <= published; i++) {
-      small.publishTrade(trade(i), i);
+      publisher.publishTrade(trade(i), i);
     }
 
     int sent = 0;
-    for (int drained; (drained = small.sendBufferedEventsToKafka()) > 0; ) {
+    for (int drained; (drained = sender.doWork()) > 0; ) {
       sent += drained;
     }
     assertThat(counters.droppedRingFull()).isPositive();
@@ -300,7 +305,7 @@ class KafkaMarketDataPublisherTest {
     publisher.publishTrade(trade(1), 1);
     publisher.publishTrade(trade(2), 2);
     publisher.publishTrade(trade(3), 3);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
 
     assertThat(counters.trades()).as("nothing acknowledged yet").isZero();
     producer.completeNext();
@@ -314,7 +319,7 @@ class KafkaMarketDataPublisherTest {
   /** The listener tells a top of book from a trade by its message. */
   @Test
   void theListenerCountsAnAcknowledgedTopOfBookAsSuch() {
-    var listener = new KafkaMarketDataPublisher.MetricProducerListener<String, Message>(counters);
+    var listener = new CountingProducerListener<String, Message>(counters);
 
     listener.onSuccess(
         new ProducerRecord<>(QUOTES, "BINANCE:BTCUSDT", ProtobufMappers.bestBidAsk(book(1), 1)),
@@ -330,12 +335,12 @@ class KafkaMarketDataPublisherTest {
     publisher.publishTrade(trade(2), 2);
     producer.sendException = new KafkaException("serialization failed");
 
-    assertThat(publisher.sendBufferedEventsToKafka()).as("both consumed").isEqualTo(2);
+    assertThat(sender.doWork()).as("both consumed").isEqualTo(2);
     assertThat(counters.failedSending()).isEqualTo(2);
 
     producer.sendException = null;
     publisher.publishTrade(trade(3), 3);
-    publisher.sendBufferedEventsToKafka();
+    sender.doWork();
     assertThat(producer.history()).as("the next one goes through").hasSize(1);
   }
 
@@ -347,17 +352,17 @@ class KafkaMarketDataPublisherTest {
       publisher.publishTrade(trade(i), i);
     }
 
-    publisher.messageSenderAgent().onClose();
+    sender.onClose();
 
     assertThat(producer.history()).hasSize(queued);
-    assertThat(publisher.sendBufferedEventsToKafka()).isZero();
+    assertThat(sender.doWork()).isZero();
   }
 
   @Test
   void neverSendsHeartbeats() {
     publisher.publishHeartbeat(1, 0);
 
-    assertThat(publisher.sendBufferedEventsToKafka()).isZero();
+    assertThat(sender.doWork()).isZero();
     assertThat(producer.history()).isEmpty();
   }
 
@@ -408,7 +413,7 @@ class KafkaMarketDataPublisherTest {
   /** Drains the whole ring, as the sender thread would, and forgets what was sent. */
   private long drain() {
     long sent = 0;
-    for (int drained; (drained = publisher.sendBufferedEventsToKafka()) > 0; ) {
+    for (int drained; (drained = sender.doWork()) > 0; ) {
       sent += drained;
     }
     producer.clear();
@@ -438,17 +443,13 @@ class KafkaMarketDataPublisherTest {
     };
   }
 
-  private KafkaMarketDataPublisher publisher(int capacity) {
-    return publisher(INSTRUMENTS, capacity);
-  }
-
-  private KafkaMarketDataPublisher publisher(Instruments instruments, int capacity) {
-    return new KafkaMarketDataPublisher(
-        template,
-        new KafkaProperties(TRADES, QUOTES, Duration.ofMillis(1), capacity, INTERVAL),
-        instruments,
-        counters,
-        clock);
+  /** Replaces the publisher and its sender with a new pair, over a ring of {@code capacity}. */
+  private void connect(Instruments instruments, int capacity) {
+    var properties = new KafkaProperties(TRADES, QUOTES, Duration.ofMillis(1), capacity, INTERVAL);
+    publisher = new KafkaMarketDataPublisher(capacity, counters);
+    sender =
+        new KafkaSenderAgent(
+            publisher.events(), template, properties, instruments, counters, clock);
   }
 
   private static Trade trade(long tradeId) {
