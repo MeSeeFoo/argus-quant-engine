@@ -1,6 +1,6 @@
 # 0004. Canonical message contracts
 
-- **Status:** Accepted, amended by [0014](0014-one-model-engine-for-alert-rules-and-indicators.md)
+- **Status:** Accepted, amended by [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) and [0030](0030-model-outputs-are-exact-decimal64-mantissas.md)
 - **Date:** 2026-10-15
 - **Issues:** #4, #5, #11
 

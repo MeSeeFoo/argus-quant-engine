@@ -16,6 +16,10 @@ option java_package = "com.argus.contracts.proto.indicators.v1";
 //
 // Kafka key: the deployment id in decimal (e.g. "42").
 message IndicatorValue {
+  // Values as doubles, replaced by value_mantissas (ADR 0030).
+  reserved 7;
+  reserved "values";
+
   // Monotonic per publisher, starts at 1; consumers use it for gap detection.
   uint64 sequence = 1;
   // Sequence of the input event that triggered the evaluation.
@@ -28,11 +32,12 @@ message IndicatorValue {
   int64 deployment_id = 5;
   // Revision of the deployment: model version and parameters.
   uint32 deployment_revision = 6;
-  // One entry per output declared in the model's ModelConfiguration, in order.
-  // NaN while the model does not have enough data.
-  repeated double values = 7;
   // Instruments the value refers to, in slot order.
   repeated Instrument instruments = 8;
+  // One entry per output declared in the model's ModelConfiguration, in order: exact decimals as
+  // mantissas with scale 10^-8 (value = mantissa * 10^-8). Long.MIN_VALUE
+  // (-9223372036854775808) while the model does not have enough data.
+  repeated int64 value_mantissas = 9;
 
   // An instrument, as in the market data messages.
   message Instrument {

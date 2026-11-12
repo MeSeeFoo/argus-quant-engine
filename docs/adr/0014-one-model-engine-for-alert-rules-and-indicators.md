@@ -1,6 +1,6 @@
 # 0014. One model engine for alert rules and indicators
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0030](0030-model-outputs-are-exact-decimal64-mantissas.md)
 - **Date:** 2026-10-19
 - **Issues:** #11, #42, #45
 - **Amends:** [0004](0004-canonical-message-contracts.md), [0012](0012-distribute-model-state-through-compacted-topics.md)
