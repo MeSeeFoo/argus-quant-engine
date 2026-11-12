@@ -44,7 +44,7 @@ class KafkaMarketDataPublisherTest {
   private final KafkaMarketDataPublisher publisher = publisher(64 * 1024);
 
   KafkaMarketDataPublisherTest() {
-    template.setProducerListener(new KafkaMarketDataPublisher.MetricProducerListener<>(counters));
+    template.setProducerListener(new CountingProducerListener<>(counters));
   }
 
   @Test
@@ -315,7 +315,7 @@ class KafkaMarketDataPublisherTest {
   /** The listener tells a top of book from a trade by its message. */
   @Test
   void theListenerCountsAnAcknowledgedTopOfBookAsSuch() {
-    var listener = new KafkaMarketDataPublisher.MetricProducerListener<String, Message>(counters);
+    var listener = new CountingProducerListener<String, Message>(counters);
 
     listener.onSuccess(
         new ProducerRecord<>(QUOTES, "BINANCE:BTCUSDT", ProtobufMappers.bestBidAsk(book(1), 1)),

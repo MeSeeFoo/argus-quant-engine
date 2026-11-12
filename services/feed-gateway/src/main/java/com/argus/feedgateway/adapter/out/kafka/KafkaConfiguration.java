@@ -69,7 +69,7 @@ class KafkaConfiguration {
    */
   @Bean
   ProducerListener<Object, Object> kafkaProducerListener(KafkaCounters kafkaCounters) {
-    return new KafkaMarketDataPublisher.MetricProducerListener<>(kafkaCounters);
+    return new CountingProducerListener<>(kafkaCounters);
   }
 
   /**

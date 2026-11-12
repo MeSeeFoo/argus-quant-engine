@@ -84,7 +84,7 @@ class KafkaRoundTripTest {
                 true));
     var counters = new KafkaCounters();
     var template = new KafkaTemplate<>(factory);
-    template.setProducerListener(new KafkaMarketDataPublisher.MetricProducerListener<>(counters));
+    template.setProducerListener(new CountingProducerListener<>(counters));
     var instruments = new Instruments(List.of(new Instrument("BINANCE", "BTCUSDT")));
     var kafka =
         new KafkaMarketDataPublisher(
