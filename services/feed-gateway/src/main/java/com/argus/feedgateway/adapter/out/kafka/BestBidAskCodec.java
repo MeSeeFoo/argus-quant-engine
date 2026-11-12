@@ -13,6 +13,9 @@ import org.agrona.MutableDirectBuffer;
  */
 final class BestBidAskCodec {
 
+  /** The ring's message type of a top-of-book slot. */
+  static final int TYPE = 2;
+
   private static final int SEQUENCE = 0;
   private static final int BOOK_UPDATE_ID = SEQUENCE + Long.BYTES;
   private static final int BID_PRICE = BOOK_UPDATE_ID + Long.BYTES;

@@ -17,6 +17,9 @@ import org.agrona.MutableDirectBuffer;
  */
 final class TradeCodec {
 
+  /** The ring's message type of a trade slot. */
+  static final int TYPE = 1;
+
   // The longs first, so they stay aligned
   private static final int SEQUENCE = 0;
   private static final int TRADE_ID = SEQUENCE + Long.BYTES;
