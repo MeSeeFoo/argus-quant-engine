@@ -2,129 +2,60 @@ package com.argus.feedgateway.adapter.out.kafka;
 
 import com.argus.feedgateway.application.port.out.MarketDataPublisher;
 import com.argus.feedgateway.domain.BestBidAsk;
-import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
-import com.argus.feedgateway.utils.FailureLog;
-import com.google.protobuf.Message;
 import java.nio.ByteBuffer;
-import java.time.Duration;
-import java.util.stream.Stream;
-import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.Agent;
-import org.agrona.concurrent.MessageHandler;
-import org.agrona.concurrent.NanoClock;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.agrona.concurrent.ringbuffer.OneToOneRingBuffer;
 import org.agrona.concurrent.ringbuffer.RingBuffer;
 import org.agrona.concurrent.ringbuffer.RingBufferDescriptor;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.ProducerListener;
 
 /**
- * The durable path's {@link MarketDataPublisher}: publishes every trade and the conflated top of
- * book to Kafka as canonical Protobuf messages, without ever blocking the gateway agent (ADR 0005,
- * ADR 0027).
+ * The durable path's {@link MarketDataPublisher}: the gateway agent's side of the Kafka adapter,
+ * which never blocks it (ADR 0005, ADR 0027).
  *
- * <p>Two threads, one ring buffer between them. The gateway agent only copies each event into the
- * ring ({@link KafkaTradeSlot}, {@link KafkaBidAskSlot}), without allocating, and drops and counts
- * it when the ring is full. The publisher thread drains the ring. It maps each trade to Protobuf
- * and hands it to the {@link KafkaTemplate}, which may block or allocate on that thread only.
- *
- * <p>A top of book is not sent when drained: it overwrites its instrument's pre-allocated slot, and
- * every interval the slots that changed are sent. The interval is measured on a monotonic clock, so
- * the last change still goes out when the market stops.
+ * <p>Two threads, one ring buffer between them. This class runs on the gateway agent's thread: it
+ * only copies each event into the ring ({@link TradeCodec}, {@link BestBidAskCodec}), without
+ * allocating, and drops and counts it when the ring is full. {@link KafkaSenderAgent} runs on its
+ * own thread: it drains the ring, conflates the top of book and sends to Kafka.
  */
 public final class KafkaMarketDataPublisher implements MarketDataPublisher {
 
-  private static final int TRADE = 1;
-  private static final int BEST_BID_ASK = 2;
-  private static final int EVENT_LIMIT = 64;
-  private static final Logger LOG = LoggerFactory.getLogger(KafkaMarketDataPublisher.class);
-  // While Kafka is down every record fails: the counters count them, the log samples them
-  private static final Duration FAILURE_LOG_INTERVAL = Duration.ofSeconds(10);
-
-  private final KafkaTemplate<String, Message> kafkaTemplate;
-  private final KafkaProperties properties;
-  private final Instruments instruments;
   private final RingBuffer events;
-  private final MessageSenderAgent messageSenderAgent;
-
-  private final KafkaCounters kafkaCounters;
-  private final FailureLog failureLog = new FailureLog(LOG, FAILURE_LOG_INTERVAL);
-  private final MessageHandler eventHandler = this::onEvent;
-
-  // Filled on the publisher thread only, while draining
-  private final Trade reusedTrade = new Trade();
-  private final BestBidAsk reusedBestBidAsk = new BestBidAsk();
-  private final NanoClock monotonicClock;
-  private final BestBidAsk[] bestBidAskConflationCache;
-  private final long[] bestBidAskSequenceCache;
-  private final boolean[] bestBidAskChanged;
-  private final long bestBidAskIntervalNanos;
-  private long lastTimeSent;
+  private final KafkaCounters counters;
 
   /**
-   * Sends with {@code kafkaTemplate}, through a ring buffer of {@code properties.bufferCapacity()}
-   * bytes, the events of {@code instruments}: the shard's, which the relay's events come from.
-   * {@code monotonicClock} measures the interval of the top of book.
+   * Creates a publisher with a ring buffer of {@code capacity} bytes.
    *
-   * @param kafkaTemplate sends the records, on the publisher thread only
-   * @param properties the adapter's properties
-   * @param instruments the shard's instruments
-   * @param kafkaCounters the adapter's counters
-   * @param monotonicClock a monotonic clock, in nanoseconds
+   * @param capacity the ring's capacity in bytes, a power of two
+   * @param counters the adapter's counters
    */
-  public KafkaMarketDataPublisher(
-      KafkaTemplate<String, Message> kafkaTemplate,
-      KafkaProperties properties,
-      Instruments instruments,
-      KafkaCounters kafkaCounters,
-      NanoClock monotonicClock) {
-    this.kafkaTemplate = kafkaTemplate;
-    this.properties = properties;
-    this.instruments = instruments;
-    this.kafkaCounters = kafkaCounters;
-    this.monotonicClock = monotonicClock;
-
+  public KafkaMarketDataPublisher(int capacity, KafkaCounters counters) {
     this.events =
         new OneToOneRingBuffer(
             new UnsafeBuffer(
-                ByteBuffer.allocateDirect(
-                    properties.bufferCapacity() + RingBufferDescriptor.TRAILER_LENGTH)));
-    this.messageSenderAgent = new MessageSenderAgent();
-    this.bestBidAskConflationCache =
-        Stream.generate(BestBidAsk::new).limit(instruments.size()).toArray(BestBidAsk[]::new);
-    this.bestBidAskSequenceCache = new long[bestBidAskConflationCache.length];
-    this.bestBidAskChanged = new boolean[bestBidAskConflationCache.length];
-    this.bestBidAskIntervalNanos = properties.bestBidAskInterval().toNanos();
-    this.lastTimeSent = monotonicClock.nanoTime();
+                ByteBuffer.allocateDirect(capacity + RingBufferDescriptor.TRAILER_LENGTH)));
+    this.counters = counters;
   }
 
   @Override
   public void publishTrade(Trade trade, long sequence) {
-    int index = events.tryClaim(TRADE, KafkaTradeSlot.LENGTH);
+    int index = events.tryClaim(TradeCodec.TYPE, TradeCodec.LENGTH);
     if (index < 0) {
-      kafkaCounters.countDroppedRingFull();
+      counters.countDroppedRingFull();
       return;
     }
-    KafkaTradeSlot.write(events.buffer(), index, sequence, trade);
+    TradeCodec.write(events.buffer(), index, sequence, trade);
     events.commit(index);
   }
 
   @Override
   public void publishBestBidAsk(BestBidAsk bestBidAsk, long sequence) {
-    int index = events.tryClaim(BEST_BID_ASK, KafkaBidAskSlot.LENGTH);
+    int index = events.tryClaim(BestBidAskCodec.TYPE, BestBidAskCodec.LENGTH);
     if (index < 0) {
-      kafkaCounters.countDroppedRingFull();
+      counters.countDroppedRingFull();
       return;
     }
-    KafkaBidAskSlot.write(events.buffer(), index, sequence, bestBidAsk);
+    BestBidAskCodec.write(events.buffer(), index, sequence, bestBidAsk);
     events.commit(index);
   }
 
@@ -133,214 +64,11 @@ public final class KafkaMarketDataPublisher implements MarketDataPublisher {
   public void publishHeartbeat(long epochNow, long sequence) {}
 
   /**
-   * Drains up to {@code EVENT_LIMIT} buffered events and, once per interval, sends the tops of book
-   * that changed. Called by the publisher thread only.
+   * The ring this publisher writes, for the {@link KafkaSenderAgent} that drains it.
    *
-   * @return how many events it read and tops of book it flushed, for the idle strategy
+   * @return the ring buffer
    */
-  int sendBufferedEventsToKafka() {
-    int eventsRead = events.read(eventHandler, EVENT_LIMIT);
-    long monotonicClockTimestamp = monotonicClock.nanoTime();
-
-    // Compared by difference: nanoTime may be negative, and may wrap
-    if (monotonicClockTimestamp - lastTimeSent >= bestBidAskIntervalNanos) {
-      lastTimeSent = monotonicClockTimestamp;
-      eventsRead += sendBestBidAskConflationCached();
-    }
-    return eventsRead;
-  }
-
-  /**
-   * Sends the top of book of every instrument that changed since the last flush, on the publisher
-   * thread. A failure is counted and does not stop the others.
-   *
-   * @return how many it flushed
-   */
-  private int sendBestBidAskConflationCached() {
-    int eventsFlushed = 0;
-    for (int instrumentId = 0; instrumentId < bestBidAskChanged.length; instrumentId++) {
-      if (bestBidAskChanged[instrumentId]) {
-        bestBidAskChanged[instrumentId] = false;
-        eventsFlushed++;
-        try {
-          sendBestBidAskToKafka(
-              bestBidAskConflationCache[instrumentId], bestBidAskSequenceCache[instrumentId]);
-        } catch (RuntimeException e) {
-          countSendFailure(e);
-        }
-      }
-    }
-    return eventsFlushed;
-  }
-
-  /**
-   * Handles one slot of the ring, on the publisher thread: sends a trade, conflates a top of book.
-   *
-   * @param type the slot's type, {@link #TRADE} or {@link #BEST_BID_ASK}
-   * @param buffer the ring buffer
-   * @param index where the slot starts
-   * @param length the length of the slot in bytes
-   */
-  private void onEvent(int type, MutableDirectBuffer buffer, int index, int length) {
-    long sequence = buffer.getLong(index);
-
-    try {
-      switch (type) {
-        case TRADE -> {
-          KafkaTradeSlot.read(buffer, index, instruments, reusedTrade);
-          sendTradeToKafka(reusedTrade, sequence);
-        }
-        case BEST_BID_ASK -> {
-          KafkaBidAskSlot.read(buffer, index, instruments, reusedBestBidAsk);
-          conflateEvent(reusedBestBidAsk, sequence);
-        }
-      }
-    } catch (RuntimeException e) {
-      countSendFailure(e);
-    }
-  }
-
-  /**
-   * Counts an event that could not be handed to Kafka, and logs a sample of them.
-   *
-   * @param e why it failed
-   */
-  private void countSendFailure(RuntimeException e) {
-    kafkaCounters.countFailedSending();
-    failureLog.log("Could not hand an event to Kafka", kafkaCounters.failedSending(), e);
-  }
-
-  /**
-   * Overwrites the instrument's pre-allocated slot, on the publisher thread. Allocation-free.
-   *
-   * @param bestBidAsk the update; copied, so it can be reused afterwards
-   * @param sequence the sequence it was published with
-   */
-  private void conflateEvent(BestBidAsk bestBidAsk, long sequence) {
-    int instrumentId = bestBidAsk.instrument().id();
-    bestBidAskChanged[instrumentId] = true;
-    bestBidAskConflationCache[instrumentId].copyFrom(bestBidAsk);
-    bestBidAskSequenceCache[instrumentId] = sequence;
-  }
-
-  /**
-   * Maps a trade to Protobuf and sends it. On the publisher thread; allocates and may block.
-   *
-   * @param trade the trade
-   * @param sequence the sequence it was published with
-   */
-  private void sendTradeToKafka(Trade trade, long sequence) {
-    sendMessageToKafka(
-        ProtobufMappers.key(trade.instrument()),
-        ProtobufMappers.trade(trade, sequence),
-        properties.tradeTopicName());
-  }
-
-  /**
-   * Maps a top of book to Protobuf and sends it. On the publisher thread; allocates and may block.
-   *
-   * @param bestBidAsk the top of book
-   * @param sequence the sequence it was published with
-   */
-  private void sendBestBidAskToKafka(BestBidAsk bestBidAsk, long sequence) {
-    sendMessageToKafka(
-        ProtobufMappers.key(bestBidAsk.instrument()),
-        ProtobufMappers.bestBidAsk(bestBidAsk, sequence),
-        properties.bestBidAskTopicName());
-  }
-
-  /**
-   * Hands a record to the template; the {@link MetricProducerListener} counts how it ends.
-   *
-   * @param key the record key
-   * @param message the record value
-   * @param topic the topic
-   */
-  @SuppressWarnings("FutureReturnValueIgnored")
-  private void sendMessageToKafka(String key, Message message, String topic) {
-    kafkaTemplate.send(topic, key, message);
-  }
-
-  /**
-   * Counts what Kafka acknowledged and what it failed to send. Called on the Kafka producer's I/O
-   * thread, so it only touches the thread-safe counters.
-   *
-   * <p>Generic because Spring Boot injects it into its template as a {@code
-   * ProducerListener<Object, Object>}: a bean declared with the template's own types would not
-   * match.
-   *
-   * @param <K> the record's key type
-   * @param <V> the record's value type
-   */
-  static final class MetricProducerListener<K, V> implements ProducerListener<K, V> {
-    private final KafkaCounters counters;
-    private final FailureLog failureLog = new FailureLog(LOG, FAILURE_LOG_INTERVAL);
-
-    /**
-     * Creates a listener that writes {@code counters}.
-     *
-     * @param counters the adapter's counters
-     */
-    MetricProducerListener(KafkaCounters counters) {
-      this.counters = counters;
-    }
-
-    @Override
-    public void onSuccess(ProducerRecord<K, V> record, @Nullable RecordMetadata metadata) {
-      if (record.value() instanceof com.argus.contracts.proto.market.trades.v1.Trade) {
-        this.counters.countTrade();
-      } else {
-        this.counters.countBestBidAsk();
-      }
-    }
-
-    @Override
-    public void onError(
-        @NonNull ProducerRecord<K, V> record,
-        @Nullable RecordMetadata metadata,
-        @NonNull Exception exception) {
-      this.counters.countFailedSending();
-      failureLog.log("Kafka did not accept a record", counters.failedSending(), exception);
-    }
-  }
-
-  /** The publisher thread's work: the only code that drains the ring and calls Kafka. */
-  private final class MessageSenderAgent implements Agent {
-    @Override
-    public int doWork() throws Exception {
-      return sendBufferedEventsToKafka();
-    }
-
-    @Override
-    public String roleName() {
-      return "kafka-message-sender";
-    }
-
-    /**
-     * Sends what is left in the ring, then the tops of book still waiting for their interval, and
-     * waits for Kafka to take it. Runs once the gateway agent has stopped (the sender stops in a
-     * later phase), so nothing is added meanwhile.
-     */
-    @Override
-    public void onClose() {
-      while (sendBufferedEventsToKafka() > 0) {
-        // Each call sends at most EVENT_LIMIT: repeat until the ring is empty
-      }
-      sendBestBidAskConflationCached();
-      kafkaTemplate.flush();
-    }
-  }
-
-  /**
-   * What it published and dropped.
-   *
-   * @return this publisher's counters
-   */
-  KafkaCounters kafkaCounters() {
-    return kafkaCounters;
-  }
-
-  Agent messageSenderAgent() {
-    return messageSenderAgent;
+  RingBuffer events() {
+    return events;
   }
 }

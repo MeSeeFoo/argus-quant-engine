@@ -84,16 +84,14 @@ class KafkaRoundTripTest {
                 true));
     var counters = new KafkaCounters();
     var template = new KafkaTemplate<>(factory);
-    template.setProducerListener(new KafkaMarketDataPublisher.MetricProducerListener<>(counters));
+    template.setProducerListener(new CountingProducerListener<>(counters));
     var instruments = new Instruments(List.of(new Instrument("BINANCE", "BTCUSDT")));
-    var kafka =
-        new KafkaMarketDataPublisher(
-            template,
-            new KafkaProperties(
-                TRADES, QUOTES, Duration.ofMillis(1), 64 * 1024, Duration.ofSeconds(1)),
-            instruments,
-            counters,
-            new SystemNanoClock());
+    var properties =
+        new KafkaProperties(TRADES, QUOTES, Duration.ofMillis(1), 64 * 1024, Duration.ofSeconds(1));
+    var kafka = new KafkaMarketDataPublisher(properties.bufferCapacity(), counters);
+    var kafkaSender =
+        new KafkaSenderAgent(
+            kafka.events(), template, properties, instruments, counters, new SystemNanoClock());
     var fastPath = new RecordingPublisher();
     var relay =
         new MarketDataRelay(
@@ -106,7 +104,7 @@ class KafkaRoundTripTest {
             new SleepingIdleStrategy(Duration.ofMillis(1).toNanos()),
             Throwable::printStackTrace,
             null,
-            kafka.messageSenderAgent());
+            kafkaSender);
     AgentRunner.startOnThread(sender);
     List<ConsumerRecord<String, Message>> received;
     try {

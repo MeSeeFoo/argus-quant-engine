@@ -1,4 +1,4 @@
-package com.argus.feedgateway.adapter.out.kafka;
+package com.argus.feedgateway.adapter.out.kafka.mapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -6,22 +6,14 @@ import com.argus.contracts.proto.market.trades.v1.Side;
 import com.argus.feedgateway.domain.AggressorSide;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instrument;
-import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
-import java.util.List;
-import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 class ProtobufMappersTest {
 
-  private static final Instruments INSTRUMENTS =
-      new Instruments(
-          List.of(new Instrument("BINANCE", "BTCUSDT"), new Instrument("BINANCE", "ETHUSDT")));
-  // As the relay passes them: from the shard's instruments, with their id, which a slot stores
-  private static final Instrument BTCUSDT = INSTRUMENTS.get(0);
-  private static final Instrument ETHUSDT = INSTRUMENTS.get(1);
+  private static final Instrument BTCUSDT = new Instrument("BINANCE", "BTCUSDT");
 
   @Test
   void mapsEveryFieldOfATrade() {
@@ -51,7 +43,17 @@ class ProtobufMappersTest {
   @ParameterizedTest
   @CsvSource({"BUY, SIDE_BUY", "SELL, SIDE_SELL"})
   void mapsTheAggressorSide(AggressorSide side, Side expected) {
-    var message = ProtobufMappers.trade(trade().aggressorSide(side), 1);
+    var message =
+        ProtobufMappers.trade(
+            new Trade()
+                .instrument(BTCUSDT)
+                .tradeId(1)
+                .price(1, 0)
+                .quantity(1, 0)
+                .aggressorSide(side)
+                .exchangeTimestamp(1)
+                .receiveTimestamp(1),
+            1);
 
     assertThat(message.getAggressorSide()).isEqualTo(expected);
   }
@@ -84,53 +86,5 @@ class ProtobufMappersTest {
   @Test
   void keysRecordsByVenueAndSymbol() {
     assertThat(ProtobufMappers.key(BTCUSDT)).isEqualTo("BINANCE:BTCUSDT");
-  }
-
-  /** What the publisher thread does: read the slot the agent wrote, then map it. */
-  @Test
-  void aTradeSurvivesTheSlotAndTheMapping() {
-    var buffer = new UnsafeBuffer(new byte[KafkaTradeSlot.LENGTH]);
-    Trade written =
-        trade().price(345_678, -2).quantity(15, -3).aggressorSide(AggressorSide.SELL).tradeId(42);
-    KafkaTradeSlot.write(buffer, 0, 9, written);
-
-    Trade read = new Trade();
-    KafkaTradeSlot.read(buffer, 0, INSTRUMENTS, read);
-    var message = ProtobufMappers.trade(read, buffer.getLong(0));
-
-    assertThat(message).isEqualTo(ProtobufMappers.trade(written, 9));
-    assertThat(message.getPrice()).as("canonical scale").isEqualTo(345_678_000_000L);
-    assertThat(message.getQuantity()).isEqualTo(1_500_000L);
-  }
-
-  @Test
-  void aTopOfBookSurvivesTheSlotAndTheMapping() {
-    var buffer = new UnsafeBuffer(new byte[KafkaBidAskSlot.LENGTH]);
-    BestBidAsk written =
-        new BestBidAsk()
-            .instrument(ETHUSDT)
-            .bookUpdateId(5)
-            .bid(1, 0, 2, 0)
-            .ask(3, 0, 4, 0)
-            .exchangeTimestamp(31)
-            .receiveTimestamp(32);
-    KafkaBidAskSlot.write(buffer, 0, 10, written);
-
-    BestBidAsk read = new BestBidAsk();
-    KafkaBidAskSlot.read(buffer, 0, INSTRUMENTS, read);
-    var message = ProtobufMappers.bestBidAsk(read, buffer.getLong(0));
-
-    assertThat(message).isEqualTo(ProtobufMappers.bestBidAsk(written, 10));
-  }
-
-  private static Trade trade() {
-    return new Trade()
-        .instrument(BTCUSDT)
-        .tradeId(1)
-        .price(1, 0)
-        .quantity(1, 0)
-        .aggressorSide(AggressorSide.BUY)
-        .exchangeTimestamp(1)
-        .receiveTimestamp(1);
   }
 }
