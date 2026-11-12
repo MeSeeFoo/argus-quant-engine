@@ -55,7 +55,7 @@ There is no "signal", "signal engine" or "rule runtime" any more: [ADR 0014](doc
 2. **No allocation on the hot path** in steady state: pre-allocated primitive ring buffers, SBE flyweights, no boxing, no locks ([Hot path](README.md#hot-path)). Spring only wires and starts the agents: no beans or proxies on the hot path ([ADR 0010](docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
 3. **No Spring, Kafka or Aeron in `domain`.** The hexagonal rules are ArchUnit tests, not conventions ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 4. **Event time everywhere.** Windows and a model's "now" use the events' `exchangeTimestamp`, never the system clock; wall-clock time only measures latency ([ADR 0017](docs/adr/0017-multi-instrument-models-and-event-time.md)).
-5. **Contracts evolve compatibly.** Follow the versioning rules in [`contracts/README.md`](contracts/README.md); a breaking change means a new schema id or topic.
+5. **Contracts evolve compatibly.** Follow the versioning rules in [`contracts/README.md`](contracts/README.md); a breaking change means a new schema id or topic. Until the first version is released they may change in place, recorded in an ADR when a decision changes ([ADR 0030](docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md)).
 
 ## Design decisions
 

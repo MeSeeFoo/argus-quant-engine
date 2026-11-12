@@ -111,8 +111,8 @@ class SchemaTest {
         "4 emit_timestamp int64",
         "5 deployment_id int64",
         "6 deployment_revision uint32",
-        "7 values repeated double",
-        "8 instruments repeated message");
+        "8 instruments repeated message",
+        "9 value_mantissas repeated int64");
     assertFields(IndicatorValue.Instrument.getDescriptor(), "1 venue string", "2 symbol string");
   }
 

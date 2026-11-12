@@ -40,11 +40,11 @@ Each rule names its source. When a rule and a document disagree, the document wi
 
 ### C. Message contracts (`contracts/`, [README](../../contracts/README.md))
 
-- C1. **SBE versioning:** add a field only at the end of its message, with `sinceVersion` and a schema `version` bump; a new message gets a new `templateId`; removing, retyping or reordering a field, or changing a `Decimal64` exponent, needs a new schema `id`.
+- C1. **SBE versioning:** add a field only at the end of its message, with `sinceVersion` and a schema `version` bump; a new message gets a new `templateId`; removing, retyping or reordering a field, or changing a `Decimal64` exponent, needs a new schema `id`. Until the first release, contracts may change in place instead, with an ADR when a decision changes ([`contracts/README.md`](../../contracts/README.md#versioning), [ADR 0030](../../docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md)).
 - C2. **Retired template ids are never reused:** `templateId` 10 (the removed `Signal`) must not appear again.
 - C3. **Protobuf field numbers equal the SBE field, group and data ids** of the counterpart message; enum values match SBE; types follow the mapping in the contracts README (decimal as `int64` mantissa scale 10⁻⁸, timestamps as `int64` epoch nanos, no `google.protobuf.Timestamp`).
 - C4. **One self-contained `.proto` per topic:** one top-level message per file, no `import`, the package *is* the topic name with its version (`argus.market.trades.v1` ↔ `argus/market/trades/v1/trade.proto`), `java_package` = `com.argus.contracts.proto.` + package, `java_multiple_files`, enum value 0 is `*_UNSPECIFIED`.
-- C5. **Protobuf evolution in `v1`:** only add fields with unused numbers, add enum values, or remove a field while adding its number **and** name to `reserved`. Any other change (renumbering, retyping, renaming, reusing) needs a new topic `….v2`.
+- C5. **Protobuf evolution in `v1`:** only add fields with unused numbers, add enum values, or remove a field while adding its number **and** name to `reserved`. Any other change (renumbering, retyping, renaming, reusing) needs a new topic `….v2`, except before the first release, when a schema may change in place as long as `buf breaking` still passes.
 - C6. **Documents updated together:** a new or changed message or topic updates `contracts/README.md`, `infra/docker/kafka/topics.conf` (topics are declared there, never created on first use) and the Contracts table in the root `README.md`, and the `SchemaTest` expectations. Generated code under `target/` is never committed.
 
 ### D. Workflow ([CONTRIBUTING.md](../../CONTRIBUTING.md))

@@ -88,14 +88,14 @@ class SchemaTest {
     }
   }
 
-  /** The values group comes first so that its doubles start 8-byte aligned. */
+  /** The values group comes first so that its mantissas start 8-byte aligned. */
   @Test
   void indicatorValuesAreEightByteAligned() {
     int firstValue =
         MessageHeaderEncoder.ENCODED_LENGTH
             + IndicatorValueEncoder.BLOCK_LENGTH
-            + IndicatorValueEncoder.ValuesEncoder.sbeHeaderSize();
+            + IndicatorValueEncoder.ValueMantissasEncoder.sbeHeaderSize();
     assertEquals(0, firstValue % 8);
-    assertEquals(8, IndicatorValueEncoder.ValuesEncoder.sbeBlockLength());
+    assertEquals(8, IndicatorValueEncoder.ValueMantissasEncoder.sbeBlockLength());
   }
 }
