@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.3.0](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.2.0...v0.3.0) (2026-11-12)
+
+
+### Features
+
+* **contracts:** carry model outputs as Decimal64 mantissas ([#143](https://github.com/MeSeeFoo/argus-quant-engine/issues/143)) ([62908c6](https://github.com/MeSeeFoo/argus-quant-engine/commit/62908c666ceecaf7b86b31d7837de2e6f2da365b))
+* **feed-gateway:** conflate the top of book on Kafka ([#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109)) ([602c6a1](https://github.com/MeSeeFoo/argus-quant-engine/commit/602c6a1295576ad91800558e2dc1dbb87672bdc6))
+* **feed-gateway:** conflate the top of book on Kafka ([#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109)) ([7a48f83](https://github.com/MeSeeFoo/argus-quant-engine/commit/7a48f832945e191185422532a5a90f4aaa1a9522))
+* **feed-gateway:** connect to Binance's SBE market data stream ([#70](https://github.com/MeSeeFoo/argus-quant-engine/issues/70)) ([f80fc03](https://github.com/MeSeeFoo/argus-quant-engine/commit/f80fc03ed11a7d4007d2dc4320ecae0a158a87ee))
+* **feed-gateway:** publish every trade to Kafka ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([cf363c1](https://github.com/MeSeeFoo/argus-quant-engine/commit/cf363c1f7f7bdd7877556fbe7baa5184215df1b3))
+* **feed-gateway:** publish every trade to Kafka ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([599414b](https://github.com/MeSeeFoo/argus-quant-engine/commit/599414b8c9628478df9041cf9c0146e50f1bab50))
+* **model-engine:** scaffold the service ([#110](https://github.com/MeSeeFoo/argus-quant-engine/issues/110)) ([b315056](https://github.com/MeSeeFoo/argus-quant-engine/commit/b3150568601ca31a44f444c94a2ff1e7517e0b0b))
+
+
+### Bug fixes
+
+* **build:** override org.json to a version without GHSA-ghc9-756g-vrcv ([#140](https://github.com/MeSeeFoo/argus-quant-engine/issues/140)) ([3f0172b](https://github.com/MeSeeFoo/argus-quant-engine/commit/3f0172bd639893ab431f67c02ed3c3c89bdc8c32))
+* **build:** upgrade dependencies with known vulnerabilities ([#130](https://github.com/MeSeeFoo/argus-quant-engine/issues/130)) ([4d1f95c](https://github.com/MeSeeFoo/argus-quant-engine/commit/4d1f95c6bdb7e478ac02b7460190c94e539dda0a))
+
+
+### Refactoring
+
+* **feed-gateway:** extract the Kafka producer listener into its own class ([#145](https://github.com/MeSeeFoo/argus-quant-engine/issues/145)) ([271c5cd](https://github.com/MeSeeFoo/argus-quant-engine/commit/271c5cd4ccd77b8a83b67287af71705b42f9f638))
+* **feed-gateway:** move the queue's layout into TradeSlot and BidAskSlot ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([6c8db9f](https://github.com/MeSeeFoo/argus-quant-engine/commit/6c8db9f4051d3f2ac7e13e1361b2dd7b00ba34ee))
+* **feed-gateway:** prepare the relay for several transports ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([f038d8f](https://github.com/MeSeeFoo/argus-quant-engine/commit/f038d8f11dfde03b41515777cfad411f7e3d1e76))
+* **feed-gateway:** queue market data in the application ([#82](https://github.com/MeSeeFoo/argus-quant-engine/issues/82)) ([b0d7a44](https://github.com/MeSeeFoo/argus-quant-engine/commit/b0d7a444b93a0c7360eaf76df4fe30d6001f15ad))
+* **feed-gateway:** rename the Kafka slots to codecs and move the mappers ([#145](https://github.com/MeSeeFoo/argus-quant-engine/issues/145)) ([4badc8d](https://github.com/MeSeeFoo/argus-quant-engine/commit/4badc8d4d030522a5884be2e928f6813ca435622))
+* **feed-gateway:** split the Kafka sender agent out of the publisher ([#145](https://github.com/MeSeeFoo/argus-quant-engine/issues/145)) ([7bf7af5](https://github.com/MeSeeFoo/argus-quant-engine/commit/7bf7af5ced5910993db0293e7744b6df8a2aa58f))
+* move AgentLifecycle to a library of its own ([#135](https://github.com/MeSeeFoo/argus-quant-engine/issues/135)) ([87da3c7](https://github.com/MeSeeFoo/argus-quant-engine/commit/87da3c7e0c3840c2d4158a9efb8aaf303a905008))
+
+
+### Documentation
+
+* **adr:** conflate the top of book on a monotonic clock ([#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109)) ([952295a](https://github.com/MeSeeFoo/argus-quant-engine/commit/952295ac64ff5f33317d4ae223cd2171cdb723df))
+* **adr:** conflate the top of book on event time ([#109](https://github.com/MeSeeFoo/argus-quant-engine/issues/109)) ([2301f48](https://github.com/MeSeeFoo/argus-quant-engine/commit/2301f486fdd018d3a064e93e0c010a02908d2743))
+* **adr:** publish market data to Kafka from the feed gateway ([#97](https://github.com/MeSeeFoo/argus-quant-engine/issues/97)) ([c43248d](https://github.com/MeSeeFoo/argus-quant-engine/commit/c43248d065b1edf1e6f6f8c6c8af76a39db67e45))
+* **adr:** publish market data to Kafka from the feed gateway ([#97](https://github.com/MeSeeFoo/argus-quant-engine/issues/97)) ([23415d3](https://github.com/MeSeeFoo/argus-quant-engine/commit/23415d3fefa6e42946871d7b8dac1618120b9b21))
+* **adr:** record and replay sessions in the feed player ([#99](https://github.com/MeSeeFoo/argus-quant-engine/issues/99)) ([a4dc3ea](https://github.com/MeSeeFoo/argus-quant-engine/commit/a4dc3eae751f99ceeb63814e8bf9af25da25e304))
+* **adr:** record and replay sessions in the feed player ([#99](https://github.com/MeSeeFoo/argus-quant-engine/issues/99)) ([121ea6a](https://github.com/MeSeeFoo/argus-quant-engine/commit/121ea6a515de6a1c204d1439991c5990e94696f6))
+* backfill code comments, comments only ([#133](https://github.com/MeSeeFoo/argus-quant-engine/issues/133)) ([ed0e26f](https://github.com/MeSeeFoo/argus-quant-engine/commit/ed0e26f2b295a62e0c153abffa582f9d959c574c))
+* correct comments found in review ([#133](https://github.com/MeSeeFoo/argus-quant-engine/issues/133)) ([37c4cee](https://github.com/MeSeeFoo/argus-quant-engine/commit/37c4ceedb23653385240586b46ab1d8c42c0408c))
+* correct what the READMEs say after the review ([#110](https://github.com/MeSeeFoo/argus-quant-engine/issues/110)) ([0bf2faa](https://github.com/MeSeeFoo/argus-quant-engine/commit/0bf2faa79d769f7f68ad9588e6d4e374599d3a1b))
+* define what code comments must say ([#133](https://github.com/MeSeeFoo/argus-quant-engine/issues/133)) ([a7498c7](https://github.com/MeSeeFoo/argus-quant-engine/commit/a7498c7d14dbfe5980ac86073d09481091519072))
+* **feed-gateway:** explain why AgentLifecycle is synchronized ([#82](https://github.com/MeSeeFoo/argus-quant-engine/issues/82)) ([7769fc9](https://github.com/MeSeeFoo/argus-quant-engine/commit/7769fc9db1f96b4e81ad5bf50dc9677869be740d))
+* **feed-gateway:** link AgentLifecycle in its utils package ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([9459601](https://github.com/MeSeeFoo/argus-quant-engine/commit/94596012252a5a00c9ccb140e4d65ed736142995))
+* flag wrong or stale comments in the reviewer agent ([#133](https://github.com/MeSeeFoo/argus-quant-engine/issues/133)) ([0172e8f](https://github.com/MeSeeFoo/argus-quant-engine/commit/0172e8f4a5cfaec6983066be42ac350cc0d02a5c))
+* let contracts change in place until the first release ([#143](https://github.com/MeSeeFoo/argus-quant-engine/issues/143)) ([73fc3d0](https://github.com/MeSeeFoo/argus-quant-engine/commit/73fc3d07cf066c624d3c096487852b6a3635f6f6))
+* state who uses the agent lifecycle library today ([#135](https://github.com/MeSeeFoo/argus-quant-engine/issues/135)) ([14a2eb2](https://github.com/MeSeeFoo/argus-quant-engine/commit/14a2eb2f8284cf427c3b150429b63cdfd09831c8))
+
+
+### Build
+
+* **deps:** bump grafana/otel-lgtm ([a47b44f](https://github.com/MeSeeFoo/argus-quant-engine/commit/a47b44fdfdd7617669ec73c09b762b15c2d2417d))
+* **deps:** bump grafana/otel-lgtm from 0.36.0 to 0.37.0 in /infra/docker in the images-minor-and-patch group ([5b416bf](https://github.com/MeSeeFoo/argus-quant-engine/commit/5b416bf4434dfa5d0b5eb419f6c1959495650143))
+* **deps:** bump org.xerial.snappy:snappy-java ([a8420b7](https://github.com/MeSeeFoo/argus-quant-engine/commit/a8420b7be630e246ca638e33e182c87e48c12ed7))
+* **deps:** bump org.xerial.snappy:snappy-java from 1.1.10.9 to 1.1.10.12 ([8623bef](https://github.com/MeSeeFoo/argus-quant-engine/commit/8623bef902bc3364f41fa54ab6fad280ab829516))
+* **deps:** bump the images-minor-and-patch group ([c9da917](https://github.com/MeSeeFoo/argus-quant-engine/commit/c9da9176d676bbd0a40d0c3a1236fd90904d4591))
+* **deps:** bump the images-minor-and-patch group in /infra/docker with 2 updates ([7c31837](https://github.com/MeSeeFoo/argus-quant-engine/commit/7c318373b53170a79e24a7db6092faf91d015557))
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 9 updates ([a36a4ca](https://github.com/MeSeeFoo/argus-quant-engine/commit/a36a4ca0d54b17d92ca537540b5b393f2827e145))
+* **deps:** bump the maven-minor-and-patch group across 1 directory with 9 updates ([f34fc32](https://github.com/MeSeeFoo/argus-quant-engine/commit/f34fc32a058a1ece9fcb8d010908a9d8b79f5611))
+* **deps:** bump the maven-minor-and-patch group with 4 updates ([997cdf1](https://github.com/MeSeeFoo/argus-quant-engine/commit/997cdf1c12aa550c86ae943174296122f5b940f2))
+* enforce code comments with Checkstyle and doclint ([#133](https://github.com/MeSeeFoo/argus-quant-engine/issues/133)) ([5ddfe24](https://github.com/MeSeeFoo/argus-quant-engine/commit/5ddfe2407b50f5cae54027099791fdd440f319c4))
+* report deprecated API use so -Werror fails on it ([#108](https://github.com/MeSeeFoo/argus-quant-engine/issues/108)) ([3cd66a6](https://github.com/MeSeeFoo/argus-quant-engine/commit/3cd66a6e449c1574191065626a7363553070c29e))
+
+
+### Continuous integration
+
+* **deps:** bump the actions-minor-and-patch group with 2 updates ([0cd5fbf](https://github.com/MeSeeFoo/argus-quant-engine/commit/0cd5fbfc6b812b62d322804ee924bedcc2a81096))
+* **deps:** bump zizmorcore/zizmor-action ([8ccac3e](https://github.com/MeSeeFoo/argus-quant-engine/commit/8ccac3ebf07eb1f0dee208943f61a4a3ebe6765f))
+* **deps:** bump zizmorcore/zizmor-action from 0.7.1 to 0.8.0 in the actions-minor-and-patch group ([c50f13a](https://github.com/MeSeeFoo/argus-quant-engine/commit/c50f13aae5fda381e548bed894d49282d84d11d2))
+
 ## [0.2.0](https://github.com/MeSeeFoo/argus-quant-engine/compare/v0.1.0...v0.2.0) (2026-10-28)
 
 
