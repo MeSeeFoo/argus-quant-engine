@@ -6,6 +6,7 @@
   - New fields are appended at the end of a message with sinceVersion="N" and the schema version is bumped.
   - New messages get a new templateId.
   - Breaking changes (removing, retyping or reordering fields) require a new schema id.
+  - Until the first release, contracts may change in place instead (contracts/README.md, ADR 0030).
 
   Layout: fields are ordered 8 -> 4 -> 2 -> 1 bytes, char arrays last, so every 64-bit field stays 8-byte aligned.
 -->
