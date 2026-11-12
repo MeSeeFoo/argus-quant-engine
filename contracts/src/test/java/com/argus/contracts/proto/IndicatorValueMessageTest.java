@@ -6,7 +6,6 @@ import static com.argus.contracts.proto.Messages.MAX_VENUE;
 import static com.argus.contracts.proto.Messages.TIMESTAMP;
 import static com.argus.contracts.proto.Messages.assertRoundTrip;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.argus.contracts.proto.indicators.v1.IndicatorValue;
 import com.argus.contracts.proto.indicators.v1.IndicatorValue.Instrument;
@@ -22,6 +21,9 @@ class IndicatorValueMessageTest {
   /** Largest uint32, read back as a negative int in Java. */
   private static final int MAX_UINT32 = -1;
 
+  /** The mantissa of an output while the model does not have enough data. */
+  private static final long NO_VALUE = Long.MIN_VALUE;
+
   static Stream<IndicatorValue> indicatorValues() {
     return Stream.of(
         indicatorValue(
@@ -31,7 +33,7 @@ class IndicatorValueMessageTest {
             TIMESTAMP + 2_300_000,
             7,
             3,
-            List.of(65_432.10123456),
+            List.of(6_543_210_123_456L),
             List.of(instrument("BINANCE", "BTCUSDT"))),
         indicatorValue(
             MAX_UINT64,
@@ -40,7 +42,7 @@ class IndicatorValueMessageTest {
             Long.MAX_VALUE,
             Long.MAX_VALUE,
             MAX_UINT32,
-            List.of(-0.0, Double.MAX_VALUE, -Double.MIN_VALUE),
+            List.of(0L, Long.MAX_VALUE, -1L),
             List.of(instrument(MAX_VENUE, MAX_SYMBOL), instrument("BINANCE", "ETHUSDT"))),
         indicatorValue(
             1,
@@ -49,7 +51,7 @@ class IndicatorValueMessageTest {
             Long.MIN_VALUE,
             Long.MIN_VALUE,
             0,
-            List.of(Double.NaN, Double.NEGATIVE_INFINITY),
+            List.of(NO_VALUE, NO_VALUE),
             List.of()));
   }
 
@@ -61,17 +63,19 @@ class IndicatorValueMessageTest {
 
   @Test
   void valuesKeepTheirOrder() throws InvalidProtocolBufferException {
-    IndicatorValue bands = indicatorValue(1, 1, 1, 1, 1, 1, List.of(1.0, 2.0, 3.0), List.of());
+    IndicatorValue bands = indicatorValue(1, 1, 1, 1, 1, 1, List.of(1L, 2L, 3L), List.of());
 
     assertEquals(
-        List.of(1.0, 2.0, 3.0), assertRoundTrip(bands, IndicatorValue.parser()).getValuesList());
+        List.of(1L, 2L, 3L),
+        assertRoundTrip(bands, IndicatorValue.parser()).getValueMantissasList());
   }
 
   @Test
-  void notEnoughDataIsNaN() throws InvalidProtocolBufferException {
-    IndicatorValue warmingUp = indicatorValue(1, 1, 1, 1, 1, 1, List.of(Double.NaN), List.of());
+  void notEnoughDataIsTheSmallestMantissa() throws InvalidProtocolBufferException {
+    IndicatorValue warmingUp = indicatorValue(1, 1, 1, 1, 1, 1, List.of(NO_VALUE), List.of());
 
-    assertTrue(Double.isNaN(assertRoundTrip(warmingUp, IndicatorValue.parser()).getValues(0)));
+    assertEquals(
+        NO_VALUE, assertRoundTrip(warmingUp, IndicatorValue.parser()).getValueMantissas(0));
   }
 
   @Test
@@ -79,7 +83,7 @@ class IndicatorValueMessageTest {
     IndicatorValue value = IndicatorValue.parseFrom(new byte[0]);
 
     assertEquals(0, value.getDeploymentId());
-    assertEquals(0, value.getValuesCount());
+    assertEquals(0, value.getValueMantissasCount());
     assertEquals(0, value.getInstrumentsCount());
   }
 
@@ -94,7 +98,7 @@ class IndicatorValueMessageTest {
       long emitTimestamp,
       long deploymentId,
       int deploymentRevision,
-      List<Double> values,
+      List<Long> valueMantissas,
       List<Instrument> instruments) {
     return IndicatorValue.newBuilder()
         .setSequence(sequence)
@@ -103,7 +107,7 @@ class IndicatorValueMessageTest {
         .setEmitTimestamp(emitTimestamp)
         .setDeploymentId(deploymentId)
         .setDeploymentRevision(deploymentRevision)
-        .addAllValues(values)
+        .addAllValueMantissas(valueMantissas)
         .addAllInstruments(instruments)
         .build();
   }

@@ -35,7 +35,7 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](0002-maven-multi-module-build-on-java-25.md) | Maven multi-module build on Java 25 | Accepted |
 | [0003](0003-dual-path-streaming.md) | Dual-path streaming: Aeron + SBE and Kafka + Protobuf | Accepted, amended by 0021 and 0027 |
-| [0004](0004-canonical-message-contracts.md) | Canonical message contracts | Accepted, amended by 0014 |
+| [0004](0004-canonical-message-contracts.md) | Canonical message contracts | Accepted, amended by 0014 and 0030 |
 | [0005](0005-the-engine-never-blocks-on-kafka.md) | The engine never blocks on Kafka | Accepted, amended by 0027 |
 | [0006](0006-archive-every-tick-and-compute-candles-on-request.md) | Archive every tick and compute candles on request | Accepted, amended by 0027 |
 | [0007](0007-questdb-for-time-series-storage.md) | QuestDB for time-series storage | Accepted |
@@ -45,7 +45,7 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0011](0011-user-models-in-python-on-graalpy.md) | User models in Python, run in-process on GraalPy | Proposed |
 | [0012](0012-distribute-model-state-through-compacted-topics.md) | Distribute model state through compacted Kafka topics | Accepted |
 | [0013](0013-trunk-based-development-without-a-develop-branch.md) | Trunk-based development without a `develop` branch | Accepted |
-| [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) | One model engine for alert rules and indicators | Accepted |
+| [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) | One model engine for alert rules and indicators | Accepted, amended by 0030 |
 | [0015](0015-built-in-models-in-java-behind-the-same-contract.md) | Built-in models in Java, behind the same contract | Accepted |
 | [0016](0016-distribute-deployments-with-a-kafka-consumer-group.md) | Distribute deployments with a Kafka consumer group | Accepted |
 | [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted, amended by 0029 |
@@ -61,3 +61,4 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md) | The feed gateway publishes market data on both paths | Accepted |
 | [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) | The feed player records sessions from the gateway | Accepted |
 | [0029](0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md) | Models declare their windows, and the engine keeps what they need | Accepted |
+| [0030](0030-model-outputs-are-exact-decimal64-mantissas.md) | Model outputs are exact `Decimal64` mantissas | Accepted |

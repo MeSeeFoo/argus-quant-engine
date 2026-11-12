@@ -6,6 +6,7 @@
   - New fields are appended at the end of a message with sinceVersion="N" and the schema version is bumped.
   - New messages get a new templateId.
   - Breaking changes (removing, retyping or reordering fields) require a new schema id.
+  - Until the first release, contracts may change in place instead (contracts/README.md, ADR 0030).
 
   Layout: fields are ordered 8 -> 4 -> 2 -> 1 bytes, char arrays last, so every 64-bit field stays 8-byte aligned.
 -->
@@ -85,8 +86,9 @@
     </sbe:message>
 
     <!--
-      Model outputs: model-engine -> fast-path consumers (ADR 0014).
+      Model outputs: model-engine -> fast-path consumers (ADR 0014, ADR 0030).
       Retired template ids, never to be reused: 10 (Signal, removed by ADR 0014).
+      Retired IndicatorValue ids, never to be reused: 7 (values as double, replaced by valueMantissas in ADR 0030).
     -->
 
     <sbe:message name="IndicatorValue" id="11" description="Values computed by an Indicator deployment">
@@ -96,8 +98,8 @@
         <field name="emitTimestamp" id="4" type="EpochNanos" description="Time the engine published the value"/>
         <field name="deploymentId" id="5" type="int64" description="Deployment that produced the value"/>
         <field name="deploymentRevision" id="6" type="uint32" description="Revision of the deployment: model version and parameters"/>
-        <group name="values" id="7" dimensionType="groupSizeEncoding" description="One entry per output declared in ModelConfiguration, in order">
-            <field name="value" id="1" type="double" description="NaN while the model does not have enough data"/>
+        <group name="valueMantissas" id="9" dimensionType="groupSizeEncoding" description="One entry per output declared in ModelConfiguration, in order">
+            <field name="value" id="1" type="Decimal64" description="Exact value; mantissa Long.MIN_VALUE while the model does not have enough data"/>
         </group>
         <group name="instruments" id="8" dimensionType="groupSizeEncoding" description="Instruments the value refers to, in slot order">
             <field name="venue" id="1" type="Venue"/>

@@ -42,7 +42,7 @@ Volume is not a message of its own: a trade's `quantity` is its volume, and aggr
 | `groupSizeEncoding` | `uint16` block length + `uint16` count | Header of a repeating group. |
 | `varStringEncoding` | `uint16` length + UTF-8 bytes | Variable-length text, after every group. |
 
-Market data uses `Decimal64`; values computed by models (`IndicatorValue`) use `double`, because a z-score or a correlation does not fit a fixed scale of 10⁻⁸. `NaN` means the model does not have enough data yet.
+Every decimal is a `Decimal64`, market data and the values computed by models (`IndicatorValue`) alike: prices and money stay exact, and one representation is easier for users than a choice per output ([ADR 0030](../docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md)). A model's value must therefore fit the scale of 10⁻⁸ and stay below about 9.2 × 10¹⁰. A mantissa of `Long.MIN_VALUE` means the model does not have enough data yet.
 
 Symbol and venue are strings so that users can refer to instruments directly in models (`"BINANCE:BTCUSDT"`), without an id catalogue. They are fixed-length, so messages keep a fixed size and can be read without allocating: compare the bytes instead of building a `String`. A value that does not fit is rejected (`IndexOutOfBoundsException`), never truncated.
 
@@ -91,10 +91,10 @@ Mid price and spread are derived values and are computed by the engine.
 | 24 | `emitTimestamp` | `EpochNanos` | Time the engine published the value |
 | 32 | `deploymentId` | `int64` | Deployment that produced the value |
 | 40 | `deploymentRevision` | `uint32` | Revision of the deployment (model version and parameters) |
-| group 7 | `values` | `double` per entry | One entry per output declared in `ModelConfiguration`, in order |
+| group 9 | `valueMantissas` | `Decimal64` per entry | One entry per output declared in `ModelConfiguration`, in order; `Long.MIN_VALUE` while the model does not have enough data |
 | group 8 | `instruments` | `venue` + `symbol` per entry | Instruments the value refers to, in slot order |
 
-`values` comes first so that its doubles start 8-byte aligned (8 + 44 + 4 = 56); `SchemaTest` checks it.
+`valueMantissas` comes first so that its mantissas start 8-byte aligned (8 + 44 + 4 = 56); `SchemaTest` checks it. Id 7 was the `values` group of `double`s, replaced in [ADR 0030](../docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md); it is never reused.
 
 **`Alert`** (45 bytes + group + text)
 
@@ -121,9 +121,11 @@ Groups and text must be written and read in this order, after the fixed fields. 
 
 The timestamps measure latency along the path: `exchangeTimestamp → receiveTimestamp` is the network hop, `receiveTimestamp → emitTimestamp` is the time spent inside the pipeline.
 
-Every field is mandatory in version 0: no field uses its null value.
+Every field is mandatory in version 0: no field uses its null value, except the mantissas of `IndicatorValue.valueMantissas`, where it means "not enough data yet".
 
 ### Versioning
+
+**Until the first version of Argus is released, the contracts may change in place,** because nothing depends on them outside this repository and no data has to be kept. A change is still recorded in an ADR when it changes a decision, and `SchemaTest` is updated with it. The Protobuf schemas still pass `buf breaking`, so a field is replaced by reserving its number and name and adding a new one, as below. The rules that follow apply in full from the first release.
 
 SBE decoders read old and new messages as long as the change is additive. The rules:
 
@@ -173,7 +175,7 @@ A Kafka message carries the same values as its SBE counterpart: the publisher co
 
 Protobuf does not enforce the length limits: the strings come from SBE messages, where they are enforced. `google.protobuf.Timestamp` and decimal wrapper messages are avoided on purpose: they would need imports, cost bytes, and break the 1:1 mapping with SBE.
 
-Every message mirrors its SBE counterpart field by field, and **its field numbers are the SBE field, group and data ids** (repeated fields map to SBE groups). Enum values match SBE too. `double` is `double` in both.
+Every message mirrors its SBE counterpart field by field, and **its field numbers are the SBE field, group and data ids** (repeated fields map to SBE groups). Enum values match SBE too.
 
 ### Messages
 
@@ -227,8 +229,9 @@ Every message mirrors its SBE counterpart field by field, and **its field number
 | 4 | `emit_timestamp` | timestamp | Time the engine published the value |
 | 5 | `deployment_id` | `int64` | Deployment that produced the value |
 | 6 | `deployment_revision` | `uint32` | Revision of the deployment |
-| 7 | `values` | `repeated double` | Outputs in the order declared in `ModelConfiguration`; `NaN` while warming up |
+| 7 | | reserved | Was `values`, `repeated double`, until [ADR 0030](../docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md) |
 | 8 | `instruments` | `repeated Instrument` | `venue` (1) and `symbol` (2), in slot order |
+| 9 | `value_mantissas` | `repeated int64` | Outputs in the order declared in `ModelConfiguration`, as decimals with scale 10⁻⁸; `Long.MIN_VALUE` while warming up |
 
 **`Alert`**
 

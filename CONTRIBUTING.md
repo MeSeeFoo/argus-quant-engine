@@ -96,7 +96,7 @@ docs: document Kafka topic provisioning (#7)
 
 - **Scope** (optional) is the area or module: `build`, `ci`, `infra`, `contracts`, `deps`…
 - **Description** in the imperative, lowercase, without a final period: "add", not "added" or "adds".
-- **Breaking changes** add `!` after the type or scope (`feat(contracts)!: …`) and explain the break in a `BREAKING CHANGE:` footer.
+- **Breaking changes** add `!` after the type or scope (`feat(contracts)!: …`) and explain the break in a `BREAKING CHANGE:` footer. Until the first release, a contract changed in place is not marked as breaking: nothing outside this repository depends on it yet ([`contracts/README.md`](contracts/README.md#versioning)).
 - **One logical change per commit.** The history of `main` is how progress is followed, so commits should read well on their own.
 - The type decides the next version: see [`docs/ci.md`](docs/ci.md#releaseyml-versions-and-releases).
 

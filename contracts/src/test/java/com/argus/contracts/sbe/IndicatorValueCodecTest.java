@@ -28,8 +28,11 @@ class IndicatorValueCodecTest {
       long emitTimestamp,
       long deploymentId,
       long deploymentRevision,
-      List<Double> values,
+      List<Long> valueMantissas,
       List<Instrument> instruments) {}
+
+  /** The mantissa of an output while the model does not have enough data. */
+  private static final long NO_VALUE = Long.MIN_VALUE;
 
   private final UnsafeBuffer buffer = Codecs.buffer();
   private final MessageHeaderEncoder headerEncoder = new MessageHeaderEncoder();
@@ -47,7 +50,7 @@ class IndicatorValueCodecTest {
             TIMESTAMP + 12_000,
             42,
             3,
-            List.of(65_432.10123456),
+            List.of(6_543_210_123_456L),
             List.of(new Instrument("BINANCE", "BTCUSDT"))),
         // Bollinger bands of a spread between two instruments.
         new IndicatorValue(
@@ -57,11 +60,10 @@ class IndicatorValueCodecTest {
             MAX_INT64,
             MAX_INT64,
             MAX_UINT32,
-            List.of(-0.0, Double.MAX_VALUE, -Double.MIN_VALUE),
+            List.of(0L, MAX_INT64, MIN_INT64, -1L),
             List.of(new Instrument(MAX_VENUE, MAX_SYMBOL), new Instrument("BINANCE", "ETHUSDT"))),
         // Not enough data yet, and empty groups.
-        new IndicatorValue(
-            1, 1, 0, 0, MIN_INT64, 0, List.of(Double.NaN, Double.NEGATIVE_INFINITY), List.of()),
+        new IndicatorValue(1, 1, 0, 0, MIN_INT64, 0, List.of(NO_VALUE, NO_VALUE), List.of()),
         new IndicatorValue(1, 1, 0, 0, 0, 0, List.of(), List.of()));
   }
 
@@ -76,9 +78,10 @@ class IndicatorValueCodecTest {
         .emitTimestamp(value.emitTimestamp())
         .deploymentId(value.deploymentId())
         .deploymentRevision(value.deploymentRevision());
-    IndicatorValueEncoder.ValuesEncoder values = encoder.valuesCount(value.values().size());
-    for (double v : value.values()) {
-      values.next().value(v);
+    IndicatorValueEncoder.ValueMantissasEncoder values =
+        encoder.valueMantissasCount(value.valueMantissas().size());
+    for (long mantissa : value.valueMantissas()) {
+      values.next().value().mantissa(mantissa);
     }
     IndicatorValueEncoder.InstrumentsEncoder instruments =
         encoder.instrumentsCount(value.instruments().size());
@@ -95,9 +98,9 @@ class IndicatorValueCodecTest {
     long emitTimestamp = decoder.emitTimestamp();
     long deploymentId = decoder.deploymentId();
     long deploymentRevision = decoder.deploymentRevision();
-    List<Double> decodedValues = new ArrayList<>();
-    for (IndicatorValueDecoder.ValuesDecoder v : decoder.values()) {
-      decodedValues.add(v.value());
+    List<Long> decodedValues = new ArrayList<>();
+    for (IndicatorValueDecoder.ValueMantissasDecoder v : decoder.valueMantissas()) {
+      decodedValues.add(v.value().mantissa());
     }
     List<Instrument> decodedInstruments = new ArrayList<>();
     for (IndicatorValueDecoder.InstrumentsDecoder i : decoder.instruments()) {
