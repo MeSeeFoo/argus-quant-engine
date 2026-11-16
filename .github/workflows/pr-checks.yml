@@ -27,7 +27,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Title follows Conventional Commits and references an issue
-        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -124,7 +124,7 @@ jobs:
 
       # Kafka consumers rely on these contracts: a removed or renumbered field fails here.
       - name: Lint, format and breaking-change check (buf)
-        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
+        uses: bufbuild/buf-action@37ac33d8960807670a6e9719080e885197b09cc6 # v1.7.0
         with:
           input: contracts/src/main/protobuf
           lint: true
@@ -147,7 +147,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
