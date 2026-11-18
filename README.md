@@ -111,6 +111,7 @@ Model state (models, deployments, the instrument catalogue, the PANIC state) is 
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
 | **`argus-architecture-rules`** | Library | ArchUnit | The hexagonal architecture rules, applied by every service with a single test class. |
 | **`argus-agent-lifecycle`** | Library | Agrona, Spring | Runs an Agrona agent on its own thread while the Spring context runs, in the services built on agents. |
+| **`argus-rate-limited-log`** | Library | SLF4J | Logs a problem that repeats at most once per interval, with the count so far, allocating nothing when it skips a line. |
 
 ---
 
@@ -129,7 +130,7 @@ Models are templates: their instruments are left open, as named **slots**, and f
 ### Hot path
 
 - **Single-threaded agents** (Agrona `AgentRunner`), each on its own thread with a back-off idle strategy (threads cannot be pinned on Fargate). Locks are never taken on the hot path.
-- **Zero allocation in steady state.** Windows are pre-allocated primitive ring buffers (no boxed collections). SBE flyweights decode messages without creating objects. Allocation rate is checked with JFR.
+- **Zero allocation in steady state.** The engine keeps the events its models need in pre-allocated, reused objects, and a model's windows are positions over them ([ADR 0029](docs/adr/0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md)). No boxed collections. SBE flyweights decode messages without creating objects. Allocation rate is checked with JFR.
 - **Event time.** Windows and the models' notion of "now" use the events' exchange timestamps, never the system clock, so replays and backtests give the same results as live runs.
 - **Kafka is decoupled** through an Agrona ring buffer and a separate publisher agent (see above).
 - **GC:** Generational ZGC, so that the remaining pauses stay short.
@@ -320,6 +321,7 @@ argus-quant-engine/
 ├── libs/
 │   ├── architecture-rules/ # argus-architecture-rules (ArchUnit rules for every service)
 │   ├── agent-lifecycle/    # argus-agent-lifecycle (runs Agrona agents under Spring)
+│   ├── rate-limited-log/   # argus-rate-limited-log (repeated problems, logged once per interval)
 │   ├── model-runtime/      # argus-model-runtime (GraalPy sandbox + the argus Python SDK)
 │   └── builtin-models/     # argus-builtin-models (Java indicators)
 ├── services/

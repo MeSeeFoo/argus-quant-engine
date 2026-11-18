@@ -33,13 +33,14 @@ Kafka topics are declared in `infra/docker/kafka/topics.conf`; topics are never 
 | `contracts/` | `argus-contracts` | SBE and Protobuf schemas, the single source of truth for messages ([`contracts/README.md`](contracts/README.md)) |
 | `libs/architecture-rules/` | `argus-architecture-rules` | ArchUnit rules every service applies with one test class |
 | `libs/agent-lifecycle/` | `argus-agent-lifecycle` | Runs an Agrona agent while the Spring context runs |
+| `libs/rate-limited-log/` | `argus-rate-limited-log` | Logs a repeated problem at most once per interval |
 | `libs/model-runtime/` | `argus-model-runtime` | GraalPy sandbox and the `argus` Python SDK |
 | `libs/builtin-models/` | `argus-builtin-models` | Java indicators (SMA, EMA, VWAP…), zero-allocation |
 | `services/<name>/` | `argus-<name>` | `feed-gateway`, `feed-player`, `model-engine`, `strategy-sim`, `notification-dispatcher`, `data-archiver`, `bff` |
 | `infra/docker/` | | Docker Compose for local development |
 | `docs/adr/` | | Architecture Decision Records |
 
-Only `contracts`, `libs/architecture-rules`, `libs/agent-lifecycle`, `services/feed-gateway` and `services/model-engine` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, application.port.in, application.port.out, adapter.in, adapter.out, config}`; each adapter owns its configuration ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
+Only `contracts`, `libs/architecture-rules`, `libs/agent-lifecycle`, `libs/rate-limited-log`, `services/feed-gateway` and `services/model-engine` exist so far; the rest arrive with their phase. The full planned layout is in the [README](README.md#-repository-layout-planned). Every service uses the hexagonal packages `com.argus.<service>.{domain, application, application.port.in, application.port.out, adapter.in, adapter.out, config}`; each adapter owns its configuration ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 
 ## Vocabulary
 
@@ -52,7 +53,7 @@ There is no "signal", "signal engine" or "rule runtime" any more: [ADR 0014](doc
 ## Rules that must never be broken
 
 1. **The fast path never blocks on Kafka.** In the feed gateway and the model engine, the fast path writes to an Agrona ring buffer drained by a separate publisher agent; when the buffer is full, messages are dropped and counted ([ADR 0005](docs/adr/0005-the-engine-never-blocks-on-kafka.md), [ADR 0027](docs/adr/0027-the-feed-gateway-publishes-market-data-on-both-paths.md)).
-2. **No allocation on the hot path** in steady state: pre-allocated primitive ring buffers, SBE flyweights, no boxing, no locks ([Hot path](README.md#hot-path)). Spring only wires and starts the agents: no beans or proxies on the hot path ([ADR 0010](docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
+2. **No allocation on the hot path** in steady state: pre-allocated ring buffers and reused objects, SBE flyweights, no boxing, no locks ([Hot path](README.md#hot-path)). Spring only wires and starts the agents: no beans or proxies on the hot path ([ADR 0010](docs/adr/0010-spring-confined-to-the-edges-of-the-engine.md)).
 3. **No Spring, Kafka or Aeron in `domain`.** The hexagonal rules are ArchUnit tests, not conventions ([ADR 0009](docs/adr/0009-hexagonal-architecture-enforced-with-archunit.md)).
 4. **Event time everywhere.** Windows and a model's "now" use the events' `exchangeTimestamp`, never the system clock; wall-clock time only measures latency ([ADR 0017](docs/adr/0017-multi-instrument-models-and-event-time.md)).
 5. **Contracts evolve compatibly.** Follow the versioning rules in [`contracts/README.md`](contracts/README.md); a breaking change means a new schema id or topic. Until the first version is released they may change in place, recorded in an ADR when a decision changes ([ADR 0030](docs/adr/0030-model-outputs-are-exact-decimal64-mantissas.md)).

@@ -1,4 +1,4 @@
-package com.argus.feedgateway.utils;
+package com.argus.log;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -13,31 +13,40 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class FailureLogTest {
+class RateLimitedLogTest {
 
-  private static final Logger LOG = LoggerFactory.getLogger(FailureLogTest.class);
+  private static final Logger LOG = LoggerFactory.getLogger(RateLimitedLogTest.class);
   private final Exception failure = new IllegalStateException("transport down");
 
   @Test
   void logsTheFirstFailureAndSkipsTheRestOfTheInterval() {
-    var log = new FailureLog(LOG, Duration.ofHours(1));
+    var log = new RateLimitedLog(LOG, Duration.ofHours(1));
 
-    assertThat(log.log("send failed", 1, failure)).as("the first one").isTrue();
-    assertThat(log.log("send failed", 2, failure)).as("within the interval").isFalse();
-    assertThat(log.log("send failed", 3, failure)).isFalse();
+    assertThat(log.error("send failed", 1, failure)).as("the first one").isTrue();
+    assertThat(log.error("send failed", 2, failure)).as("within the interval").isFalse();
+    assertThat(log.error("send failed", 3, failure)).isFalse();
+  }
+
+  @Test
+  void warningsAndErrorsShareTheInterval() {
+    var log = new RateLimitedLog(LOG, Duration.ofHours(1));
+
+    assertThat(log.warn("ring full", 1)).isTrue();
+    assertThat(log.warn("ring full", 2)).isFalse();
+    assertThat(log.error("send failed", 1, failure)).isFalse();
   }
 
   @Test
   void logsAgainOnceTheIntervalHasPassed() {
-    var log = new FailureLog(LOG, Duration.ZERO);
+    var log = new RateLimitedLog(LOG, Duration.ZERO);
 
-    assertThat(log.log("send failed", 1, failure)).isTrue();
-    assertThat(log.log("send failed", 2, failure)).isTrue();
+    assertThat(log.error("send failed", 1, failure)).isTrue();
+    assertThat(log.warn("ring full", 2)).isTrue();
   }
 
   @Test
   void logsOncePerIntervalWhateverTheThreads() throws Exception {
-    var log = new FailureLog(LOG, Duration.ofHours(1));
+    var log = new RateLimitedLog(LOG, Duration.ofHours(1));
     var logged = new AtomicInteger();
     var start = new CountDownLatch(1);
     int threads = 8;
@@ -50,7 +59,7 @@ class FailureLogTest {
                 () -> {
                   start.await();
                   for (int j = 0; j < 1_000; j++) {
-                    if (log.log("send failed", j, failure)) {
+                    if (log.error("send failed", j, failure)) {
                       logged.incrementAndGet();
                     }
                   }
@@ -69,6 +78,6 @@ class FailureLogTest {
   @Test
   void rejectsANegativeInterval() {
     assertThatIllegalArgumentException()
-        .isThrownBy(() -> new FailureLog(LOG, Duration.ofSeconds(-1)));
+        .isThrownBy(() -> new RateLimitedLog(LOG, Duration.ofSeconds(-1)));
   }
 }

@@ -18,9 +18,10 @@ com.argus.feedgateway
 │   ├── out.aeron            AeronMarketDataPublisher, with its configuration
 │   ├── out.kafka            KafkaMarketDataPublisher (the gateway agent's side) and KafkaSenderAgent (its own thread) around one ring, TradeCodec and BestBidAskCodec (the ring's layouts), BestBidAskConflator, CountingProducerListener, with its configuration
 │   └── out.kafka.mapping    ProtobufMappers: events to the canonical Protobuf messages
-├── config                   Instruments, the use case and the agent: nothing about Binance, Aeron or Kafka
-└── utils                    Usable from any package: FailureLog (a throttled error log)
+└── config                   Instruments, the use case and the agent: nothing about Binance, Aeron or Kafka
 ```
+
+Failures that repeat, such as Kafka being down, are logged with [`argus-rate-limited-log`](../../libs/rate-limited-log/README.md): at most one line per interval, with the count so far.
 
 A frame's journey. The adapter decodes on the connection's thread and hands the events over; from the queue on, everything runs on the gateway agent's thread:
 

@@ -48,16 +48,18 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0014](0014-one-model-engine-for-alert-rules-and-indicators.md) | One model engine for alert rules and indicators | Accepted, amended by 0030 |
 | [0015](0015-built-in-models-in-java-behind-the-same-contract.md) | Built-in models in Java, behind the same contract | Accepted |
 | [0016](0016-distribute-deployments-with-a-kafka-consumer-group.md) | Distribute deployments with a Kafka consumer group | Accepted |
-| [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted |
+| [0017](0017-multi-instrument-models-and-event-time.md) | Multi-instrument models, chained indicators and event time | Accepted, amended by 0029 |
 | [0018](0018-output-policy-of-the-durable-path.md) | Output policy of the durable path | Accepted |
 | [0019](0019-a-global-panic-button-for-models.md) | A global PANIC button for models | Accepted |
 | [0020](0020-the-notification-dispatcher-only-notifies.md) | The notification dispatcher only notifies | Accepted |
 | [0021](0021-run-everything-on-fargate-with-aeron-over-udp.md) | Run everything on Fargate, with Aeron over UDP | Accepted |
-| [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted |
+| [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted, amended by 0031 |
 | [0023](0023-instrument-catalogue.md) | Instrument catalogue | Accepted |
 | [0024](0024-a-feed-player-for-replay-and-backtesting.md) | A feed player for replay and backtesting | Accepted, amended by 0028 |
 | [0025](0025-model-promotion-across-environments.md) | Model promotion across environments | Accepted, not implemented |
 | [0026](0026-regulatory-archive-for-mifid-ii.md) | Regulatory archive for MiFID II | Accepted, not implemented |
 | [0027](0027-the-feed-gateway-publishes-market-data-on-both-paths.md) | The feed gateway publishes market data on both paths | Accepted |
 | [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) | The feed player records sessions from the gateway | Accepted |
+| [0029](0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md) | Models declare their windows, and the engine keeps what they need | Accepted |
 | [0030](0030-model-outputs-are-exact-decimal64-mantissas.md) | Model outputs are exact `Decimal64` mantissas | Accepted |
+| [0031](0031-the-engine-detects-lost-market-data-from-the-gateways-sequence-only.md) | The engine detects lost market data from the gateway's sequence only | Accepted |

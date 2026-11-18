@@ -32,7 +32,21 @@
             <groupId>com.argus</groupId>
             <artifactId>argus-agent-lifecycle</artifactId>
         </dependency>
-        <!-- Fast path: Aeron, with an embedded Media Driver (ADR 0021) -->
+        <!-- Problems that repeat, logged at most once per interval -->
+        <dependency>
+            <groupId>com.argus</groupId>
+            <artifactId>argus-rate-limited-log</artifactId>
+        </dependency>
+        <!-- Hand-off between the reader and evaluator agents (ADR 0029) -->
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+        </dependency>
+        <!-- Fast path: canonical SBE messages over Aeron, with an embedded Media Driver (ADR 0021) -->
+        <dependency>
+            <groupId>com.argus</groupId>
+            <artifactId>argus-contracts</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.aeron</groupId>
             <artifactId>aeron-client</artifactId>
@@ -40,6 +54,10 @@
         <dependency>
             <groupId>io.aeron</groupId>
             <artifactId>aeron-driver</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
         </dependency>
 
         <dependency>

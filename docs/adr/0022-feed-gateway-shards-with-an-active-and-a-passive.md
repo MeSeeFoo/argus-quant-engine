@@ -1,6 +1,6 @@
 # 0022. Feed gateway shards, with an active and a passive per shard
 
-- **Status:** Accepted, to be built after Phase 3
+- **Status:** Accepted, to be built after Phase 3, amended by [0031](0031-the-engine-detects-lost-market-data-from-the-gateways-sequence-only.md)
 - **Date:** 2026-10-19
 - **Issues:** #11, #43
 

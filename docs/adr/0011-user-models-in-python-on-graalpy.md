@@ -18,7 +18,13 @@ During the architecture review (2026-10-19) we agreed that Argus is a low-latenc
 - Models are warmed up on recent data before going live, run on their own evaluator agent, and are disabled by a circuit breaker if they fail repeatedly.
 - pandas and NumPy are C extensions and cannot run under this sandbox. They live only in `argus-quant-lab`; `argus.math` exposes vetted numerical functions implemented in Java.
 
-The proof of concept must confirm which policy GraalPy supports (`ISOLATED` or `UNTRUSTED`, which need the `python-isolate` artifact) and measure the cost of a call from the engine. If it fails, this ADR is superseded.
+The proof of concept must confirm which policy GraalPy supports (`ISOLATED` or `UNTRUSTED`, which need the `python-isolate` artifact) and measure the cost of a call from the engine. It must also confirm how exact decimals cross the boundary ([0029](0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md)):
+
+- a Java `long` mantissa reaches Python as an exact `int`;
+- Python's `decimal` module is available inside the sandbox, so the SDK can build a `Decimal` from the mantissa;
+- how a model's `Decimal` result comes back to Java without losing precision.
+
+If it fails, this ADR is superseded.
 
 ## Consequences
 
