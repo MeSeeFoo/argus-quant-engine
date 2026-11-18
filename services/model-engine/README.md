@@ -51,7 +51,7 @@ Aeron ─▶ decode ─▶ checks ─▶ ring of slots ─▶ windows ─▶ mod
 An agent that polls the gateway's Aeron stream, up to 256 messages per duty cycle, like the evaluator, and decodes `Trade`, `BestBidAsk` and `Heartbeat` with SBE flyweights. It subscribes to `argus.model-engine.aeron.channel`, which registers with the gateway's control endpoint, and `stream-id`, the gateway's shard.
 
 - **Old events.** A trade whose `tradeId`, or a top-of-book update whose `bookUpdateId`, is not newer than the last one of its instrument is dropped and counted ([ADR 0022](../../docs/adr/0022-feed-gateway-shards-with-an-active-and-a-passive.md)).
-- **Gaps.** Jumps in `sequence` are counted. A publisher that restarts is a new session, not a gap.
+- **Gaps.** Jumps in `sequence` are counted. A publisher that restarts is a new session, not a gap. The engine never looks for gaps in a venue's own ids, such as Binance's consecutive `tradeId`: that would couple it to each venue, so it is the job of that venue's adapter in the gateway ([ADR 0031](../../docs/adr/0031-the-engine-detects-lost-market-data-from-the-gateways-sequence-only.md)).
 - **Never waits.** Data in Aeron that the reader does not take is the reader waiting, even with its thread free. So the reader always drains Aeron, and a full ring drops data with a [backpressure strategy](#backpressure).
 
 ### The Disruptor

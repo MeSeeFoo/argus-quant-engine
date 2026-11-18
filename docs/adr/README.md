@@ -53,7 +53,7 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0019](0019-a-global-panic-button-for-models.md) | A global PANIC button for models | Accepted |
 | [0020](0020-the-notification-dispatcher-only-notifies.md) | The notification dispatcher only notifies | Accepted |
 | [0021](0021-run-everything-on-fargate-with-aeron-over-udp.md) | Run everything on Fargate, with Aeron over UDP | Accepted |
-| [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted |
+| [0022](0022-feed-gateway-shards-with-an-active-and-a-passive.md) | Feed gateway shards, with an active and a passive per shard | Accepted, amended by 0031 |
 | [0023](0023-instrument-catalogue.md) | Instrument catalogue | Accepted |
 | [0024](0024-a-feed-player-for-replay-and-backtesting.md) | A feed player for replay and backtesting | Accepted, amended by 0028 |
 | [0025](0025-model-promotion-across-environments.md) | Model promotion across environments | Accepted, not implemented |
@@ -62,3 +62,4 @@ Once the first implementation is merged and the decision has been applied as wri
 | [0028](0028-the-feed-player-records-sessions-from-the-gateway.md) | The feed player records sessions from the gateway | Accepted |
 | [0029](0029-models-declare-their-windows-and-the-engine-keeps-what-they-need.md) | Models declare their windows, and the engine keeps what they need | Accepted |
 | [0030](0030-model-outputs-are-exact-decimal64-mantissas.md) | Model outputs are exact `Decimal64` mantissas | Accepted |
+| [0031](0031-the-engine-detects-lost-market-data-from-the-gateways-sequence-only.md) | The engine detects lost market data from the gateway's sequence only | Accepted |
