@@ -111,6 +111,7 @@ Model state (models, deployments, the instrument catalogue, the PANIC state) is 
 | **`argus-contracts`** | Library | SBE schemas, Protobuf | Single source of truth for all message contracts. Generates the codecs used by every service. |
 | **`argus-architecture-rules`** | Library | ArchUnit | The hexagonal architecture rules, applied by every service with a single test class. |
 | **`argus-agent-lifecycle`** | Library | Agrona, Spring | Runs an Agrona agent on its own thread while the Spring context runs, in the services built on agents. |
+| **`argus-rate-limited-log`** | Library | SLF4J | Logs a problem that repeats at most once per interval, with the count so far, allocating nothing when it skips a line. |
 
 ---
 
@@ -320,6 +321,7 @@ argus-quant-engine/
 ├── libs/
 │   ├── architecture-rules/ # argus-architecture-rules (ArchUnit rules for every service)
 │   ├── agent-lifecycle/    # argus-agent-lifecycle (runs Agrona agents under Spring)
+│   ├── rate-limited-log/   # argus-rate-limited-log (repeated problems, logged once per interval)
 │   ├── model-runtime/      # argus-model-runtime (GraalPy sandbox + the argus Python SDK)
 │   └── builtin-models/     # argus-builtin-models (Java indicators)
 ├── services/

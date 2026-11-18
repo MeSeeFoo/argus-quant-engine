@@ -4,7 +4,7 @@ import com.argus.feedgateway.adapter.out.kafka.mapping.ProtobufMappers;
 import com.argus.feedgateway.domain.BestBidAsk;
 import com.argus.feedgateway.domain.Instruments;
 import com.argus.feedgateway.domain.Trade;
-import com.argus.feedgateway.utils.FailureLog;
+import com.argus.log.RateLimitedLog;
 import com.google.protobuf.Message;
 import java.time.Duration;
 import org.agrona.MutableDirectBuffer;
@@ -38,7 +38,7 @@ final class KafkaSenderAgent implements Agent {
   private final String bestBidAskTopic;
   private final Instruments instruments;
   private final KafkaCounters counters;
-  private final FailureLog failureLog = new FailureLog(LOG, FAILURE_LOG_INTERVAL);
+  private final RateLimitedLog failureLog = new RateLimitedLog(LOG, FAILURE_LOG_INTERVAL);
 
   // Created once, so draining and flushing allocate no lambda
   private final MessageHandler eventHandler = this::onEvent;
@@ -189,6 +189,6 @@ final class KafkaSenderAgent implements Agent {
    */
   private void countSendFailure(RuntimeException e) {
     counters.countFailedSending();
-    failureLog.log("Could not hand an event to Kafka", counters.failedSending(), e);
+    failureLog.error("Could not hand an event to Kafka", counters.failedSending(), e);
   }
 }

@@ -17,5 +17,6 @@
     <modules>
         <module>architecture-rules</module>
         <module>agent-lifecycle</module>
+        <module>rate-limited-log</module>
     </modules>
 </project>

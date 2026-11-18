@@ -147,6 +147,11 @@
                 <artifactId>argus-agent-lifecycle</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.argus</groupId>
+                <artifactId>argus-rate-limited-log</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Fast path -->
             <dependency>

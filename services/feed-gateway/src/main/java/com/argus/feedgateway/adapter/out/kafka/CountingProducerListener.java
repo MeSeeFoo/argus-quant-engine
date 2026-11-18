@@ -1,6 +1,6 @@
 package com.argus.feedgateway.adapter.out.kafka;
 
-import com.argus.feedgateway.utils.FailureLog;
+import com.argus.log.RateLimitedLog;
 import java.time.Duration;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -27,7 +27,7 @@ final class CountingProducerListener<K, V> implements ProducerListener<K, V> {
   private static final Duration FAILURE_LOG_INTERVAL = Duration.ofSeconds(10);
 
   private final KafkaCounters counters;
-  private final FailureLog failureLog = new FailureLog(LOG, FAILURE_LOG_INTERVAL);
+  private final RateLimitedLog failureLog = new RateLimitedLog(LOG, FAILURE_LOG_INTERVAL);
 
   /**
    * Creates a listener that writes {@code counters}.
@@ -53,6 +53,6 @@ final class CountingProducerListener<K, V> implements ProducerListener<K, V> {
       @Nullable RecordMetadata metadata,
       @NonNull Exception exception) {
     counters.countFailedSending();
-    failureLog.log("Kafka did not accept a record", counters.failedSending(), exception);
+    failureLog.error("Kafka did not accept a record", counters.failedSending(), exception);
   }
 }
