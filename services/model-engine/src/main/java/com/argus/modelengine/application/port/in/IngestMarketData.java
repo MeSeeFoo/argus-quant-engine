@@ -6,8 +6,8 @@ import com.argus.modelengine.domain.marketdata.Trade;
 /**
  * What an inbound adapter hands over for each message it decodes (ADR 0009).
  *
- * <p>Called only on the reader thread, from {@link MarketDataSource#poll}. Allocation-free. The
- * events are views the adapter reuses: each one is valid only during the call that received it.
+ * <p>Called only on the reader thread, by the adapter's reader agent. Allocation-free. The events
+ * are views the adapter reuses: each one is valid only during the call that received it.
  */
 public interface IngestMarketData {
 

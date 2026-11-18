@@ -1,13 +1,14 @@
-package com.argus.modelengine.domain.window;
-
-import com.argus.modelengine.domain.marketdata.AggressorSide;
-import com.argus.modelengine.domain.marketdata.Trade;
+package com.argus.modelengine.domain.marketdata;
 
 /**
- * The stored form of a {@link Trade}: pre-allocated and overwritten when {@link TradeStore} reuses
- * it. Package-private, so only the store can write it and models only see the interface (ADR 0029).
+ * A reusable {@link Trade}: pre-allocated, and overwritten with {@link #copyFrom} each time it is
+ * reused. Windows keep their copies of events in these, and each slot of the Disruptor ring holds
+ * one (ADR 0029). Models only ever receive it as the read-only {@link Trade}.
+ *
+ * <p>Not thread-safe: one thread writes it at a time, and the Disruptor's sequences publish the
+ * writes to the thread that reads it next. Allocation-free.
  */
-final class MutableTrade implements Trade {
+public final class MutableTrade implements Trade {
 
   private int instrumentId;
   private long sequence;
@@ -19,16 +20,17 @@ final class MutableTrade implements Trade {
   private AggressorSide aggressorSide = AggressorSide.BUY;
 
   /**
-   * Overwrites this object with {@code source}, on the evaluator thread. Allocation-free.
+   * Overwrites this object with {@code source}: on the reader thread in a ring slot, on the
+   * evaluator thread in a window. Allocation-free.
    *
    * @param source the event to copy
    */
-  void copyFrom(Trade source) {
+  public void copyFrom(Trade source) {
     instrumentId = source.instrumentId();
     sequence = source.sequence();
     tradeId = source.tradeId();
-    price = source.price();
-    quantity = source.quantity();
+    price = source.priceMantissa();
+    quantity = source.quantityMantissa();
     exchangeTimestamp = source.exchangeTimestamp();
     receiveTimestamp = source.receiveTimestamp();
     aggressorSide = source.aggressorSide();
@@ -50,12 +52,12 @@ final class MutableTrade implements Trade {
   }
 
   @Override
-  public long price() {
+  public long priceMantissa() {
     return price;
   }
 
   @Override
-  public long quantity() {
+  public long quantityMantissa() {
     return quantity;
   }
 

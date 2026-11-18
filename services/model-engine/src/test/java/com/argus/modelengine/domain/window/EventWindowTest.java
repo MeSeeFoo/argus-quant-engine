@@ -4,7 +4,9 @@ import static com.argus.modelengine.domain.window.TestEvents.SECOND;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.argus.modelengine.domain.marketdata.AggressorSide;
 import com.argus.modelengine.domain.marketdata.BestBidAsk;
+import com.argus.modelengine.domain.marketdata.MarketEventType;
 import com.argus.modelengine.domain.marketdata.Trade;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,161 +17,215 @@ class EventWindowTest {
   private final TestEvents events = new TestEvents();
 
   @Test
-  void aSlidingWindowHoldsTheLastEventsAndFiresOnEachOne() {
-    TradeStore store = new TradeStore(3);
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(3));
+  void theViewDescribesTheInputItServes() {
+    Window<Trade> trades = EventWindow.ofTrades("trades", WindowDefinition.sliding(3)).view();
+    Window<BestBidAsk> quotes =
+        EventWindow.ofBestBidAsks("quotes", WindowDefinition.tumbling(100)).view();
 
-    for (int id = 1; id <= 5; id++) {
-      store.append(events.trade(id, id));
-      assertThat(window.hasFired()).isTrue();
-    }
-
-    assertThat(ids(window)).containsExactly(3L, 4L, 5L);
+    assertThat(trades.name()).isEqualTo("trades");
+    assertThat(trades.eventType()).isEqualTo(MarketEventType.TRADE);
+    assertThat(trades.windowType()).isEqualTo(WindowDefinition.Type.SLIDING);
+    assertThat(quotes.name()).isEqualTo("quotes");
+    assertThat(quotes.eventType()).isEqualTo(MarketEventType.BEST_BID_ASK);
+    assertThat(quotes.windowType()).isEqualTo(WindowDefinition.Type.TUMBLING);
   }
 
   @Test
-  void aSlidingWindowHoldsWhatItHasWhileFillingUp() {
-    TradeStore store = new TradeStore(3);
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(3));
+  void aSlidingWindowHoldsTheLastEventsAndFiresOnEachOneOnceFull() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(3));
 
-    assertThat(window.size()).isZero();
-    store.append(events.trade(1, 1));
-    store.append(events.trade(2, 2));
+    assertThat(window.append(events.trade(1, 1))).isNull();
+    assertThat(window.append(events.trade(2, 2))).isNull();
+    for (int id = 3; id <= 5; id++) {
+      assertThat(window.append(events.trade(id, id))).isSameAs(window.view());
+    }
 
-    assertThat(ids(window)).containsExactly(1L, 2L);
+    assertThat(ids(window.view())).containsExactly(3L, 4L, 5L);
+  }
+
+  @Test
+  void theViewIsEmptyUntilTheWindowFirstFires() {
+    EventWindow<Trade> sliding = EventWindow.ofTrades("trades", WindowDefinition.sliding(3));
+    EventWindow<Trade> tumbling = EventWindow.ofTrades("trades", WindowDefinition.tumbling(3));
+
+    sliding.append(events.trade(1, 1));
+    tumbling.append(events.trade(1, 1));
+
+    assertThat(sliding.view().events()).isEmpty();
+    assertThat(tumbling.view().events()).isEmpty();
   }
 
   @Test
   void aSlidingWindowOfOneIsEveryUpdate() {
-    BestBidAskStore store = new BestBidAskStore(1);
-    EventWindow<BestBidAsk> window = store.window(WindowDefinition.sliding(1));
+    EventWindow<BestBidAsk> window =
+        EventWindow.ofBestBidAsks("quotes", WindowDefinition.sliding(1));
 
     for (int id = 1; id <= 3; id++) {
-      store.append(events.bestBidAsk(id, id));
+      Window<BestBidAsk> fired = window.append(events.bestBidAsk(id, id));
 
-      assertThat(window.hasFired()).isTrue();
-      assertThat(window.size()).isEqualTo(1);
-      assertThat(window.get(0).bookUpdateId()).isEqualTo(id);
+      assertThat(fired).isSameAs(window.view());
+      assertThat(window.view().events()).hasSize(1);
+      assertThat(window.view().events()[0].bookUpdateId()).isEqualTo(id);
     }
   }
 
   @Test
-  void aTumblingWindowFiresOnceEverySliceAndReadsTheLastClosedOne() {
-    TradeStore store = new TradeStore(5);
-    EventWindow<Trade> window = store.window(WindowDefinition.tumbling(3));
+  void aWindowThatDoesNotFireReturnsNull() {
+    EventWindow<BestBidAsk> window =
+        EventWindow.ofBestBidAsks("quotes", WindowDefinition.tumbling(2));
+
+    assertThat(window.append(events.bestBidAsk(1, 1))).isNull();
+  }
+
+  @Test
+  void aTumblingWindowFiresOnceEverySliceAndHoldsTheLastClosedOne() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.tumbling(3));
     List<Integer> firedAt = new ArrayList<>();
 
     for (int id = 1; id <= 8; id++) {
-      store.append(events.trade(id, id));
-      if (window.hasFired()) {
+      if (window.append(events.trade(id, id)) != null) {
         firedAt.add(id);
       }
     }
 
     assertThat(firedAt).containsExactly(3, 6);
-    assertThat(ids(window)).containsExactly(4L, 5L, 6L);
-  }
-
-  @Test
-  void aTumblingWindowIsEmptyUntilItsFirstSliceCloses() {
-    TradeStore store = new TradeStore(5);
-    EventWindow<Trade> window = store.window(WindowDefinition.tumbling(3));
-
-    store.append(events.trade(1, 1));
-    store.append(events.trade(2, 2));
-
-    assertThat(window.hasFired()).isFalse();
-    assertThat(window.size()).isZero();
+    assertThat(ids(window.view())).containsExactly(4L, 5L, 6L);
   }
 
   @Test
   void theClosedSliceStaysIntactWhileTheNextOneFills() {
-    // 2N - 1: the smallest store a tumbling window of N accepts
-    TradeStore store = new TradeStore(5);
-    EventWindow<Trade> window = store.window(WindowDefinition.tumbling(3));
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.tumbling(3));
 
     for (int id = 1; id <= 5; id++) {
-      store.append(events.trade(id, id));
+      window.append(events.trade(id, id));
     }
 
-    assertThat(window.hasFired()).isFalse();
-    assertThat(ids(window)).containsExactly(1L, 2L, 3L);
+    assertThat(ids(window.view())).containsExactly(1L, 2L, 3L);
   }
 
   @Test
-  void fitsInTheSizeThePlannerGivesItForAnyNumberOfEvents() {
-    TradeStore store = new TradeStore(WindowDefinition.tumbling(100).requiredCapacity());
-    EventWindow<Trade> window = store.window(WindowDefinition.tumbling(100));
+  void aTumblingWindowKeepsGoingForAnyNumberOfEvents() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.tumbling(100));
 
     for (int id = 1; id <= 1_050; id++) {
-      store.append(events.trade(id, id));
+      window.append(events.trade(id, id));
     }
 
-    assertThat(store.capacity()).isEqualTo(199);
-    assertThat(window.size()).isEqualTo(100);
+    Trade[] slice = window.view().events();
+    assertThat(slice).hasSize(100);
     for (int i = 0; i < 100; i++) {
-      assertThat(window.get(i).tradeId()).isEqualTo(901L + i);
+      assertThat(slice[i].tradeId()).isEqualTo(901L + i);
     }
   }
 
   @Test
-  void windowsOnOneStoreShareTheSameObjects() {
-    TradeStore store = new TradeStore(4);
-    EventWindow<Trade> sliding = store.window(WindowDefinition.sliding(2));
-    EventWindow<Trade> tumbling = store.window(WindowDefinition.tumbling(2));
-
-    store.append(events.trade(1, 1));
-    store.append(events.trade(2, 2));
-
-    assertThat(sliding.get(1)).isSameAs(tumbling.get(1));
-  }
-
-  @Test
-  void followsArrivalOrderAndEventTimeAtAnySpeed() {
-    // A day of events replayed in a loop: windows only count events, the clock never matters
-    TradeStore store = new TradeStore(3);
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(3));
+  void aSlidingWindowKeepsGoingForAnyNumberOfEvents() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(7));
 
     for (int id = 1; id <= 1_000; id++) {
-      store.append(events.trade(id, id * 86L * SECOND));
+      window.append(events.trade(id, id));
     }
 
-    assertThat(ids(window)).containsExactly(998L, 999L, 1_000L);
-    assertThat(window.now()).isEqualTo(1_000 * 86 * SECOND);
+    assertThat(ids(window.view())).containsExactly(994L, 995L, 996L, 997L, 998L, 999L, 1_000L);
+  }
+
+  @Test
+  void theViewIsAlwaysTheSameObject() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.tumbling(2));
+    Window<Trade> view = window.view();
+
+    for (int id = 1; id <= 6; id++) {
+      Window<Trade> fired = window.append(events.trade(id, id));
+      if (fired != null) {
+        assertThat(fired).isSameAs(view);
+      }
+    }
+  }
+
+  @Test
+  void keepsCopiesSoTheEventItWasGivenCanBeReused() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(1));
+    Trade source = events.trade(1, 1);
+
+    window.append(source);
+    events.trade(2, 2); // the same object, overwritten as a ring slot would be
+
+    assertThat(window.view().events()[0]).isNotSameAs(source);
+    assertThat(window.view().events()[0].tradeId()).isEqualTo(1);
+  }
+
+  @Test
+  void copiesEveryFieldOfATrade() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(1));
+
+    window.append(events.trade(7, 50));
+
+    Trade trade = window.view().events()[0];
+    assertThat(trade.instrumentId()).isEqualTo(1);
+    assertThat(trade.sequence()).isEqualTo(107);
+    assertThat(trade.tradeId()).isEqualTo(7);
+    assertThat(trade.priceMantissa()).isEqualTo(7);
+    assertThat(trade.quantityMantissa()).isEqualTo(14);
+    assertThat(trade.exchangeTimestamp()).isEqualTo(50);
+    assertThat(trade.receiveTimestamp()).isEqualTo(51);
+    assertThat(trade.aggressorSide()).isEqualTo(AggressorSide.SELL);
+  }
+
+  @Test
+  void copiesEveryFieldOfATopOfBookUpdate() {
+    EventWindow<BestBidAsk> window =
+        EventWindow.ofBestBidAsks("quotes", WindowDefinition.sliding(1));
+
+    window.append(events.bestBidAsk(7, 50));
+
+    BestBidAsk update = window.view().events()[0];
+    assertThat(update.instrumentId()).isEqualTo(2);
+    assertThat(update.sequence()).isEqualTo(107);
+    assertThat(update.bookUpdateId()).isEqualTo(7);
+    assertThat(update.bidPriceMantissa()).isEqualTo(7);
+    assertThat(update.bidQuantityMantissa()).isEqualTo(8);
+    assertThat(update.askPriceMantissa()).isEqualTo(9);
+    assertThat(update.askQuantityMantissa()).isEqualTo(10);
+    assertThat(update.exchangeTimestamp()).isEqualTo(50);
+    assertThat(update.receiveTimestamp()).isEqualTo(51);
+  }
+
+  @Test
+  void followsArrivalOrderAtAnySpeed() {
+    // A day of events replayed in a loop: windows only count events, the clock never matters
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(3));
+
+    for (int id = 1; id <= 1_000; id++) {
+      window.append(events.trade(id, id * 86L * SECOND));
+    }
+
+    assertThat(ids(window.view())).containsExactly(998L, 999L, 1_000L);
+    assertThat(window.view().now()).isEqualTo(1_000 * 86L * SECOND);
   }
 
   @Test
   void nowNeverGoesBackwardsAndLateEventsAreNotReordered() {
-    TradeStore store = new TradeStore(3);
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(3));
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(3));
 
-    assertThat(window.now()).isEqualTo(EventWindow.NO_TIMESTAMP);
-    store.append(events.trade(1, 10 * SECOND));
-    store.append(events.trade(2, 5 * SECOND));
-    store.append(events.trade(3, 11 * SECOND));
+    assertThat(window.view().now()).isEqualTo(Window.NO_TIMESTAMP);
+    window.append(events.trade(1, 10 * SECOND));
+    window.append(events.trade(2, 5 * SECOND));
+    window.append(events.trade(3, 11 * SECOND));
 
-    assertThat(ids(window)).containsExactly(1L, 2L, 3L);
-    assertThat(window.now()).isEqualTo(11 * SECOND);
+    assertThat(ids(window.view())).containsExactly(1L, 2L, 3L);
+    assertThat(window.view().now()).isEqualTo(11 * SECOND);
   }
 
   @Test
-  void aWindowCreatedLaterStartsWithTheNextEvent() {
-    TradeStore store = new TradeStore(3);
-    store.append(events.trade(1, 1));
+  void nowOfATumblingWindowFollowsEveryEvent() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.tumbling(2));
 
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(3));
-    store.append(events.trade(2, 2));
+    window.append(events.trade(1, 1));
+    window.append(events.trade(2, 2));
+    window.append(events.trade(3, 3));
 
-    assertThat(ids(window)).containsExactly(2L);
-  }
-
-  @Test
-  void rejectsAnIndexOutsideTheWindow() {
-    TradeStore store = new TradeStore(2);
-    EventWindow<Trade> window = store.window(WindowDefinition.sliding(2));
-    store.append(events.trade(1, 1));
-
-    assertThatThrownBy(() -> window.get(1)).isInstanceOf(IndexOutOfBoundsException.class);
+    assertThat(window.view().now()).isEqualTo(3);
+    assertThat(ids(window.view())).containsExactly(1L, 2L);
   }
 
   @Test
@@ -180,17 +236,10 @@ class EventWindowTest {
         .isInstanceOf(IllegalArgumentException.class);
   }
 
-  @Test
-  void requiredCapacityFollowsTheWindowType() {
-    assertThat(WindowDefinition.sliding(100).requiredCapacity()).isEqualTo(100);
-    assertThat(WindowDefinition.tumbling(100).requiredCapacity()).isEqualTo(199);
-    assertThat(WindowDefinition.tumbling(1).requiredCapacity()).isEqualTo(1);
-  }
-
-  private static List<Long> ids(EventWindow<Trade> window) {
+  private static List<Long> ids(Window<Trade> window) {
     List<Long> ids = new ArrayList<>();
-    for (int i = 0; i < window.size(); i++) {
-      ids.add(window.get(i).tradeId());
+    for (Trade trade : window.events()) {
+      ids.add(trade.tradeId());
     }
     return ids;
   }

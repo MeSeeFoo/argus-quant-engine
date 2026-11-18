@@ -11,3 +11,23 @@ management:
     web:
       exposure:
         include: health, metrics
+
+argus:
+  model-engine:
+    # What the engine does, whatever its adapters (ADR 0009)
+    # The instruments it handles as VENUE:SYMBOL, until the instrument catalogue arrives (ADR 0023)
+    instruments: BINANCE:BTCUSDT
+    # Slots of the Disruptor ring between the reader and the evaluator, a power of two: about 3 MB.
+    # It is the engine's only buffer against bursts: the reader never leaves data in Aeron (ADR 0029)
+    ring-size: 16384
+    # What a full ring drops: drop-oldest (the evaluator skips its backlog, so fresh data flows at
+    # once) or drop-newest (the event that does not fit is dropped, the ring keeps what it holds)
+    backpressure: drop-oldest
+
+    # Inbound adapter: the gateway's fast path over Aeron
+    aeron:
+      # Registers with the gateway's control endpoint (dynamic multi-destination-cast, ADR 0021);
+      # port 0 lets the driver pick a free port to receive on
+      channel: aeron:udp?endpoint=localhost:0|control=localhost:40456|control-mode=dynamic
+      # Shard 1 (ADR 0023)
+      stream-id: 1001

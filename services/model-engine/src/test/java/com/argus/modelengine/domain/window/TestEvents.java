@@ -48,12 +48,12 @@ final class TestEvents {
     }
 
     @Override
-    public long price() {
+    public long priceMantissa() {
       return tradeId;
     }
 
     @Override
-    public long quantity() {
+    public long quantityMantissa() {
       return 2 * tradeId;
     }
 
@@ -94,22 +94,22 @@ final class TestEvents {
     }
 
     @Override
-    public long bidPrice() {
+    public long bidPriceMantissa() {
       return bookUpdateId;
     }
 
     @Override
-    public long bidQuantity() {
+    public long bidQuantityMantissa() {
       return bookUpdateId + 1;
     }
 
     @Override
-    public long askPrice() {
+    public long askPriceMantissa() {
       return bookUpdateId + 2;
     }
 
     @Override
-    public long askQuantity() {
+    public long askQuantityMantissa() {
       return bookUpdateId + 3;
     }
 

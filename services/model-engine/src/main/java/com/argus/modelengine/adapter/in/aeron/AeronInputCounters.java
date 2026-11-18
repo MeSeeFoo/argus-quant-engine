@@ -12,19 +12,31 @@ public final class AeronInputCounters {
   private final AtomicLong malformed = new AtomicLong();
   private final AtomicLong unsupported = new AtomicLong();
 
-  /** Counts an event of an instrument the engine does not handle. */
-  void countUnknownInstrument() {
-    unknownInstruments.incrementAndGet();
+  /**
+   * Counts an event of an instrument the engine does not handle.
+   *
+   * @return the count, this one included
+   */
+  long countUnknownInstrument() {
+    return unknownInstruments.incrementAndGet();
   }
 
-  /** Counts an event whose fields the engine cannot use. */
-  void countMalformed() {
-    malformed.incrementAndGet();
+  /**
+   * Counts an event whose fields the engine cannot use.
+   *
+   * @return the count, this one included
+   */
+  long countMalformed() {
+    return malformed.incrementAndGet();
   }
 
-  /** Counts a message of another schema or of a template the engine does not read. */
-  void countUnsupported() {
-    unsupported.incrementAndGet();
+  /**
+   * Counts a message of another schema or of a template the engine does not read.
+   *
+   * @return the count, this one included
+   */
+  long countUnsupported() {
+    return unsupported.incrementAndGet();
   }
 
   /**

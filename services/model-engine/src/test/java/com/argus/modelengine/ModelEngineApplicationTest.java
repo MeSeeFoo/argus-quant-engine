@@ -21,7 +21,7 @@ class ModelEngineApplicationTest {
   void startsHealthyAndStopsCleanly() throws Exception {
     ConfigurableApplicationContext context =
         SpringApplication.run(ModelEngineApplication.class, "--server.port=0");
-    AgentLifecycle agent = context.getBean("modelEngineAgent", AgentLifecycle.class);
+    AgentLifecycle agent = context.getBean("evaluatorAgent", AgentLifecycle.class);
     Aeron aeron = context.getBean(Aeron.class);
     Path driverDirectory = Path.of(context.getBean(MediaDriver.class).aeronDirectoryName());
 

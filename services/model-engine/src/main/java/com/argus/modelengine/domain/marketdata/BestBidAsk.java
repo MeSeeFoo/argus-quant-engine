@@ -18,26 +18,26 @@ public interface BestBidAsk extends MarketEvent {
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long bidPrice();
+  long bidPriceMantissa();
 
   /**
    * The quantity at the best bid.
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long bidQuantity();
+  long bidQuantityMantissa();
 
   /**
    * The best ask.
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long askPrice();
+  long askPriceMantissa();
 
   /**
    * The quantity at the best ask.
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long askQuantity();
+  long askQuantityMantissa();
 }

@@ -67,6 +67,21 @@ public final class Instruments {
   }
 
   /**
+   * Finds an instrument, for deployments at startup.
+   *
+   * @param instrument the instrument to find
+   * @return its id, or {@link #UNKNOWN} if the engine does not handle it
+   */
+  public int indexOf(Instrument instrument) {
+    for (int i = 0; i < instruments.length; i++) {
+      if (instruments[i].equals(instrument)) {
+        return i;
+      }
+    }
+    return UNKNOWN;
+  }
+
+  /**
    * Finds an instrument by its raw canonical fields, uppercase US-ASCII and null-padded as SBE
    * carries them. Any thread. Allocation-free: the engine handles a handful of instruments, so a
    * linear scan is enough.

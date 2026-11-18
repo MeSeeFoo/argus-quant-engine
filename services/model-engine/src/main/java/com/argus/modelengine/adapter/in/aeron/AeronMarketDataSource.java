@@ -3,37 +3,65 @@ package com.argus.modelengine.adapter.in.aeron;
 import com.argus.contracts.sbe.BestBidAskDecoder;
 import com.argus.contracts.sbe.HeartbeatDecoder;
 import com.argus.contracts.sbe.MessageHeaderDecoder;
-import com.argus.contracts.sbe.Side;
 import com.argus.contracts.sbe.TradeDecoder;
+import com.argus.log.RateLimitedLog;
+import com.argus.modelengine.adapter.in.aeron.decoder.DecodedBestBidAsk;
+import com.argus.modelengine.adapter.in.aeron.decoder.DecodedTrade;
 import com.argus.modelengine.application.port.in.IngestMarketData;
-import com.argus.modelengine.application.port.in.MarketDataSource;
 import com.argus.modelengine.domain.instrument.Instrument;
 import com.argus.modelengine.domain.instrument.Instruments;
 import com.argus.modelengine.domain.marketdata.AggressorSide;
-import com.argus.modelengine.domain.marketdata.BestBidAsk;
-import com.argus.modelengine.domain.marketdata.Trade;
 import io.aeron.Subscription;
 import io.aeron.logbuffer.FragmentHandler;
 import io.aeron.logbuffer.Header;
+import java.time.Duration;
 import org.agrona.DirectBuffer;
-import org.jspecify.annotations.Nullable;
+import org.agrona.concurrent.Agent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads the gateway's canonical SBE messages from an Aeron subscription and hands them to {@link
- * IngestMarketData}.
+ * IngestMarketData}. The adapter owns the reader agent that polls it, like the gateway's Kafka
+ * sender: the application only sees what it hands over, through the input port.
  *
  * <p>Every message is shorter than the MTU, so one fragment is one message and the poll's limit
  * counts messages.
  *
  * <p>Used only on the reader thread. Allocation-free: decoders and views are reused, and the events
- * it hands over read straight from Aeron's buffer, so they are valid only during the call.
+ * it hands over read straight from Aeron's buffer, so they are valid only during the call. A
+ * message it ignores is counted and logged at most once per interval, which allocates only when a
+ * line is written.
  */
-public final class AeronMarketDataSource implements MarketDataSource {
+public final class AeronMarketDataSource {
+
+  /**
+   * Messages read per duty cycle at most. It bounds one duty cycle, not the ring: during a burst
+   * the agent polls again at once, and each message reaches the ring as soon as it is decoded, so
+   * the value changes neither throughput nor latency. It keeps each cycle short, and fair between
+   * the images of an active and a passive gateway, among which Aeron spreads the limit. The same as
+   * the evaluator's batch limit, so both sides of the ring move in batches of the same size.
+   */
+  private static final int POLL_LIMIT = 256;
+
+  private static final Logger LOG = LoggerFactory.getLogger(AeronMarketDataSource.class);
+  // A misconfigured gateway may send them all the time: the counters count, the log samples
+  private static final Duration IGNORED_LOG_INTERVAL = Duration.ofSeconds(10);
+  private static final String UNKNOWN_INSTRUMENT =
+      "Ignored a message of an instrument the engine does not handle";
+  private static final String MALFORMED = "Ignored a trade with a side the engine does not know";
+  private static final String UNSUPPORTED =
+      "Ignored a message of another schema, or of a template the engine does not read";
 
   private final Subscription subscription;
   private final Instruments instruments;
-  private final IngestMarketData ingest;
+  private final IngestMarketData ingestMarketDataService;
   private final AeronInputCounters counters = new AeronInputCounters();
+  private final Agent agent = new AeronInputMDAgent();
+  // One per kind, so a flood of one never hides the others; allocation-free while not logging
+  private final RateLimitedLog unknownInstrumentLog = new RateLimitedLog(LOG, IGNORED_LOG_INTERVAL);
+  private final RateLimitedLog malformedLog = new RateLimitedLog(LOG, IGNORED_LOG_INTERVAL);
+  private final RateLimitedLog unsupportedLog = new RateLimitedLog(LOG, IGNORED_LOG_INTERVAL);
 
   // Created once: a method reference made at each poll would allocate
   private final FragmentHandler fragmentHandler = this::onFragment;
@@ -51,16 +79,25 @@ public final class AeronMarketDataSource implements MarketDataSource {
    *
    * @param subscription the gateway's stream
    * @param instruments the instruments the engine handles
-   * @param ingest receives every message read
+   * @param ingestMarketDataService receives every message read
    */
   public AeronMarketDataSource(
-      Subscription subscription, Instruments instruments, IngestMarketData ingest) {
+      Subscription subscription,
+      Instruments instruments,
+      IngestMarketData ingestMarketDataService) {
     this.subscription = subscription;
     this.instruments = instruments;
-    this.ingest = ingest;
+    this.ingestMarketDataService = ingestMarketDataService;
   }
 
-  @Override
+  /**
+   * Reads up to {@code limit} messages and hands each one to {@link IngestMarketData}. Never
+   * blocks; the limit only bounds one call, and the next one reads the rest. Reader thread.
+   * Allocation-free.
+   *
+   * @param limit the most messages to read, 0 or more
+   * @return the number of messages read
+   */
   public int poll(int limit) {
     return subscription.poll(fragmentHandler, limit);
   }
@@ -75,6 +112,15 @@ public final class AeronMarketDataSource implements MarketDataSource {
   }
 
   /**
+   * The reader agent that polls this source, for {@code AgentLifecycle} to run on its own thread.
+   *
+   * @return the agent, the same one every call
+   */
+  public Agent agent() {
+    return agent;
+  }
+
+  /**
    * Decodes one message.
    *
    * @param buffer the buffer holding it
@@ -85,14 +131,14 @@ public final class AeronMarketDataSource implements MarketDataSource {
   private void onFragment(DirectBuffer buffer, int offset, int length, Header header) {
     messageHeader.wrap(buffer, offset);
     if (messageHeader.schemaId() != MessageHeaderDecoder.SCHEMA_ID) {
-      counters.countUnsupported();
+      unsupportedLog.warn(UNSUPPORTED, counters.countUnsupported());
       return;
     }
     switch (messageHeader.templateId()) {
       case TradeDecoder.TEMPLATE_ID -> onTrade(buffer, offset, header.sessionId());
       case BestBidAskDecoder.TEMPLATE_ID -> onBestBidAsk(buffer, offset, header.sessionId());
       case HeartbeatDecoder.TEMPLATE_ID -> onHeartbeat(buffer, offset, header.sessionId());
-      default -> counters.countUnsupported();
+      default -> unsupportedLog.warn(UNSUPPORTED, counters.countUnsupported());
     }
   }
 
@@ -108,34 +154,17 @@ public final class AeronMarketDataSource implements MarketDataSource {
     tradeDecoder.getVenue(venue, 0);
     tradeDecoder.getSymbol(symbol, 0);
     int instrumentId = instruments.indexOf(venue, symbol);
-    AggressorSide side = aggressorSide(tradeDecoder.aggressorSideRaw());
+    AggressorSide side = DecodedTrade.aggressorSide(tradeDecoder.aggressorSideRaw());
     if (instrumentId == Instruments.UNKNOWN) {
-      counters.countUnknownInstrument();
-      ingest.onIgnored(session, tradeDecoder.sequence());
+      unknownInstrumentLog.warn(UNKNOWN_INSTRUMENT, counters.countUnknownInstrument());
+      ingestMarketDataService.onIgnored(session, tradeDecoder.sequence());
     } else if (side == null) {
-      counters.countMalformed();
-      ingest.onIgnored(session, tradeDecoder.sequence());
+      malformedLog.warn(MALFORMED, counters.countMalformed());
+      ingestMarketDataService.onIgnored(session, tradeDecoder.sequence());
     } else {
       trade.set(instrumentId, side);
-      ingest.onTrade(session, trade);
+      ingestMarketDataService.onTrade(session, trade);
     }
-  }
-
-  /**
-   * Maps the wire value of a trade's side. The raw value, because decoding an enum throws on a
-   * value it does not know.
-   *
-   * @param raw the value on the wire
-   * @return its side, or {@code null} if it is not a valid one
-   */
-  private static @Nullable AggressorSide aggressorSide(short raw) {
-    if (raw == Side.BUY.value()) {
-      return AggressorSide.BUY;
-    }
-    if (raw == Side.SELL.value()) {
-      return AggressorSide.SELL;
-    }
-    return null;
   }
 
   /**
@@ -151,11 +180,11 @@ public final class AeronMarketDataSource implements MarketDataSource {
     bestBidAskDecoder.getSymbol(symbol, 0);
     int instrumentId = instruments.indexOf(venue, symbol);
     if (instrumentId == Instruments.UNKNOWN) {
-      counters.countUnknownInstrument();
-      ingest.onIgnored(session, bestBidAskDecoder.sequence());
+      unknownInstrumentLog.warn(UNKNOWN_INSTRUMENT, counters.countUnknownInstrument());
+      ingestMarketDataService.onIgnored(session, bestBidAskDecoder.sequence());
     } else {
-      bestBidAsk.instrumentId = instrumentId;
-      ingest.onBestBidAsk(session, bestBidAsk);
+      bestBidAsk.set(instrumentId);
+      ingestMarketDataService.onBestBidAsk(session, bestBidAsk);
     }
   }
 
@@ -168,135 +197,25 @@ public final class AeronMarketDataSource implements MarketDataSource {
    */
   private void onHeartbeat(DirectBuffer buffer, int offset, int session) {
     heartbeatDecoder.wrapAndApplyHeader(buffer, offset, messageHeader);
-    ingest.onHeartbeat(session, heartbeatDecoder.sequence());
+    ingestMarketDataService.onHeartbeat(session, heartbeatDecoder.sequence());
   }
 
-  /** A read-only view of the trade the decoder is wrapped around. */
-  private static final class DecodedTrade implements Trade {
+  /**
+   * The reader agent (ADR 0029): drains the subscription on its own thread, up to {@link
+   * #POLL_LIMIT} messages per duty cycle so a burst never holds the thread for too long. It never
+   * leaves data in Aeron for the evaluator's sake: a full ring is the backpressure strategy's
+   * concern, in the application.
+   */
+  private final class AeronInputMDAgent implements Agent {
 
-    private final TradeDecoder decoder;
-    private int instrumentId;
-    private AggressorSide side = AggressorSide.BUY;
-
-    /**
-     * Creates a view over a decoder.
-     *
-     * @param decoder the decoder it reads from
-     */
-    DecodedTrade(TradeDecoder decoder) {
-      this.decoder = decoder;
-    }
-
-    /**
-     * Sets what the decoder does not give directly.
-     *
-     * @param instrumentId the engine's id of the instrument
-     * @param side the trade's side
-     */
-    void set(int instrumentId, AggressorSide side) {
-      this.instrumentId = instrumentId;
-      this.side = side;
+    @Override
+    public int doWork() {
+      return poll(POLL_LIMIT);
     }
 
     @Override
-    public int instrumentId() {
-      return instrumentId;
-    }
-
-    @Override
-    public long sequence() {
-      return decoder.sequence();
-    }
-
-    @Override
-    public long exchangeTimestamp() {
-      return decoder.exchangeTimestamp();
-    }
-
-    @Override
-    public long receiveTimestamp() {
-      return decoder.receiveTimestamp();
-    }
-
-    @Override
-    public long tradeId() {
-      return decoder.tradeId();
-    }
-
-    @Override
-    public long price() {
-      return decoder.price().mantissa();
-    }
-
-    @Override
-    public long quantity() {
-      return decoder.quantity().mantissa();
-    }
-
-    @Override
-    public AggressorSide aggressorSide() {
-      return side;
-    }
-  }
-
-  /** A read-only view of the top-of-book update the decoder is wrapped around. */
-  private static final class DecodedBestBidAsk implements BestBidAsk {
-
-    private final BestBidAskDecoder decoder;
-    private int instrumentId;
-
-    /**
-     * Creates a view over a decoder.
-     *
-     * @param decoder the decoder it reads from
-     */
-    DecodedBestBidAsk(BestBidAskDecoder decoder) {
-      this.decoder = decoder;
-    }
-
-    @Override
-    public int instrumentId() {
-      return instrumentId;
-    }
-
-    @Override
-    public long sequence() {
-      return decoder.sequence();
-    }
-
-    @Override
-    public long exchangeTimestamp() {
-      return decoder.exchangeTimestamp();
-    }
-
-    @Override
-    public long receiveTimestamp() {
-      return decoder.receiveTimestamp();
-    }
-
-    @Override
-    public long bookUpdateId() {
-      return decoder.bookUpdateId();
-    }
-
-    @Override
-    public long bidPrice() {
-      return decoder.bidPrice().mantissa();
-    }
-
-    @Override
-    public long bidQuantity() {
-      return decoder.bidQuantity().mantissa();
-    }
-
-    @Override
-    public long askPrice() {
-      return decoder.askPrice().mantissa();
-    }
-
-    @Override
-    public long askQuantity() {
-      return decoder.askQuantity().mantissa();
+    public String roleName() {
+      return "aeron-input-md";
     }
   }
 }

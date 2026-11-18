@@ -32,6 +32,11 @@
             <groupId>com.argus</groupId>
             <artifactId>argus-agent-lifecycle</artifactId>
         </dependency>
+        <!-- Problems that repeat, logged at most once per interval -->
+        <dependency>
+            <groupId>com.argus</groupId>
+            <artifactId>argus-rate-limited-log</artifactId>
+        </dependency>
         <!-- Hand-off between the reader and evaluator agents (ADR 0029) -->
         <dependency>
             <groupId>com.lmax</groupId>

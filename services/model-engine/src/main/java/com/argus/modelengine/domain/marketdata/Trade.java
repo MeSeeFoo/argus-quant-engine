@@ -18,14 +18,14 @@ public interface Trade extends MarketEvent {
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long price();
+  long priceMantissa();
 
   /**
    * The traded quantity.
    *
    * @return a {@code Decimal64} mantissa (scale 10⁻⁸)
    */
-  long quantity();
+  long quantityMantissa();
 
   /**
    * The side that took liquidity.

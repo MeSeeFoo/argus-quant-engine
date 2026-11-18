@@ -47,15 +47,4 @@ public record WindowDefinition(Type type, int count) {
   public static WindowDefinition tumbling(int count) {
     return new WindowDefinition(Type.TUMBLING, count);
   }
-
-  /**
-   * How many events a store must keep for this window: {@code count} for a sliding window, and
-   * {@code 2 × count − 1} for a tumbling one, whose last closed slice stays readable while the next
-   * one fills.
-   *
-   * @return the number of events
-   */
-  public int requiredCapacity() {
-    return type == Type.SLIDING ? count : 2 * count - 1;
-  }
 }

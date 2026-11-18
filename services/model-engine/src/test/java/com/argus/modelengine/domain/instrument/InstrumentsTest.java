@@ -38,6 +38,13 @@ class InstrumentsTest {
   }
 
   @Test
+  void findsAnInstrumentForADeployment() {
+    assertThat(instruments.indexOf(Instrument.parse("KRAKEN:BTCUSDT"))).isEqualTo(2);
+    assertThat(instruments.indexOf(Instrument.parse("KRAKEN:ETHUSDT")))
+        .isEqualTo(Instruments.UNKNOWN);
+  }
+
+  @Test
   void theVenueIsPartOfTheInstrument() {
     assertThat(indexOf("KRAKEN", "BTCUSDT")).isEqualTo(2);
   }

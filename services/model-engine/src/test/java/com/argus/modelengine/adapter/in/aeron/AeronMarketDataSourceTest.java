@@ -28,8 +28,12 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 /** Reads messages published over a real embedded Media Driver. */
+@ExtendWith(OutputCaptureExtension.class)
 class AeronMarketDataSourceTest {
 
   private static final String CHANNEL = "aeron:ipc";
@@ -187,6 +191,37 @@ class AeronMarketDataSourceTest {
     assertThat(ingest.seen).hasSize(3);
   }
 
+  @Test
+  void theReaderAgentDrainsTheSource() throws Exception {
+    publishTrade("BTCUSDT", 1, Side.BUY);
+    publishTrade("BTCUSDT", 2, Side.BUY);
+
+    int[] read = {0};
+    awaitTrue(
+        () -> {
+          try {
+            read[0] += source.agent().doWork();
+          } catch (Exception e) {
+            throw new IllegalStateException(e);
+          }
+          return read[0] == 2;
+        });
+
+    assertThat(ingest.seen).hasSize(2);
+    assertThat(source.agent().roleName()).isEqualTo("aeron-input-md");
+  }
+
+  @Test
+  void anIgnoredMessageIsLogged(CapturedOutput output) {
+    publishTrade("SOLUSDT", 1, Side.BUY);
+
+    readMessages(1);
+
+    assertThat(output)
+        .contains("Ignored a message of an instrument the engine does not handle")
+        .contains("(1 so far");
+  }
+
   private void publishTrade(String symbol, long sequence, Side side) {
     TradeEncoder encoder = new TradeEncoder();
     encoder
@@ -243,9 +278,9 @@ class AeronMarketDataSourceTest {
               + " id="
               + trade.tradeId()
               + " price="
-              + trade.price()
+              + trade.priceMantissa()
               + " quantity="
-              + trade.quantity()
+              + trade.quantityMantissa()
               + " exchange="
               + trade.exchangeTimestamp()
               + " receive="
@@ -266,13 +301,13 @@ class AeronMarketDataSourceTest {
               + " id="
               + book.bookUpdateId()
               + " bid="
-              + book.bidPrice()
+              + book.bidPriceMantissa()
               + "x"
-              + book.bidQuantity()
+              + book.bidQuantityMantissa()
               + " ask="
-              + book.askPrice()
+              + book.askPriceMantissa()
               + "x"
-              + book.askQuantity()
+              + book.askQuantityMantissa()
               + " exchange="
               + book.exchangeTimestamp()
               + " receive="

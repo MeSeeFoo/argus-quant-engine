@@ -23,8 +23,8 @@ final class TestMarketData {
       long exchangeTimestamp,
       long receiveTimestamp,
       long tradeId,
-      long price,
-      long quantity,
+      long priceMantissa,
+      long quantityMantissa,
       AggressorSide aggressorSide)
       implements Trade {}
 
@@ -34,9 +34,9 @@ final class TestMarketData {
       long exchangeTimestamp,
       long receiveTimestamp,
       long bookUpdateId,
-      long bidPrice,
-      long bidQuantity,
-      long askPrice,
-      long askQuantity)
+      long bidPriceMantissa,
+      long bidQuantityMantissa,
+      long askPriceMantissa,
+      long askQuantityMantissa)
       implements BestBidAsk {}
 }
