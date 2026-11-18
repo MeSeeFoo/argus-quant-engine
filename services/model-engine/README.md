@@ -81,7 +81,7 @@ At startup the [`Evaluator`](src/main/java/com/argus/modelengine/application/Eva
 
 | Window | Copies it keeps | Fires |
 | :--- | :--- | :--- |
-| Sliding, last N events | N, in a circular array: each new event overwrites the oldest | on every event |
+| Sliding, last N events | N, in a circular array: each new event overwrites the oldest | once full, then every `slide` events (every event by default) |
 | Tumbling, slices of N events | 2N, in two halves: the last closed slice stays readable while the next one fills, then they swap | when a slice closes |
 
 | Deployment | Windows |
@@ -116,7 +116,7 @@ Two inputs on the same instrument, such as a model's trades and top of book, are
 
 **Windows.** A model declares them, per instrument and kind of event, by number of events.
 
-- **Sliding:** the last N events. It fires on every event.
+- **Sliding:** the last N events. It fires once full, then every `slide` events: `sliding(100)` on every event, `sliding(100, 10)` every 10 events, on the last 100. Between firings its view still holds the last N events in order, so a model reading it when another of its inputs fires never sees a mix.
 - **Tumbling:** slices of N events that do not overlap. The model reads the last closed slice, and the window fires when a slice closes.
 - Windows by time are left for when a model needs them.
 - A window's "now" is the latest `exchangeTimestamp` of its input, never the system clock, and never goes backwards. Events are never reordered, so a replay gives the same result as the original run.

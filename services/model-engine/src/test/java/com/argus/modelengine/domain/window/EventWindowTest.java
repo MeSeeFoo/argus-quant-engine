@@ -44,6 +44,48 @@ class EventWindowTest {
   }
 
   @Test
+  void aSlidingWindowWithASlideFiresOnceFullThenEverySlideEvents() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(4, 2));
+
+    assertThat(firedAt(window, 9)).containsExactly(4, 6, 8);
+    assertThat(ids(window.view())).containsExactly(6L, 7L, 8L, 9L);
+  }
+
+  @Test
+  void aSlideOfTheWholeCountFiresOncePerCount() {
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(3, 3));
+
+    assertThat(firedAt(window, 9)).containsExactly(3, 6, 9);
+    assertThat(ids(window.view())).containsExactly(7L, 8L, 9L);
+  }
+
+  @Test
+  void betweenFiringsTheViewHoldsTheLastEventsInOrder() {
+    // A model with several inputs reads this one when another fires: never a mix of old and new
+    EventWindow<Trade> window = EventWindow.ofTrades("trades", WindowDefinition.sliding(3, 3));
+
+    assertThat(firedAt(window, 4)).containsExactly(3);
+    assertThat(ids(window.view())).containsExactly(2L, 3L, 4L);
+  }
+
+  @Test
+  void aSlideIsBetweenOneAndTheCount() {
+    assertThat(WindowDefinition.sliding(3).slide()).as("every event by default").isEqualTo(1);
+    assertThat(WindowDefinition.sliding(3, 3).slide()).isEqualTo(3);
+    assertThatThrownBy(() -> WindowDefinition.sliding(3, 0))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> WindowDefinition.sliding(3, 4))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void aTumblingWindowSlidesByItsWholeCount() {
+    assertThat(WindowDefinition.tumbling(5).slide()).isEqualTo(5);
+    assertThatThrownBy(() -> new WindowDefinition(WindowDefinition.Type.TUMBLING, 5, 1))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void theViewIsEmptyUntilTheWindowFirstFires() {
     EventWindow<Trade> sliding = EventWindow.ofTrades("trades", WindowDefinition.sliding(3));
     EventWindow<Trade> tumbling = EventWindow.ofTrades("trades", WindowDefinition.tumbling(3));
@@ -234,6 +276,17 @@ class EventWindowTest {
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> WindowDefinition.tumbling(-1))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  /** Appends trades with ids 1 to {@code events} and returns the ids at which the window fired. */
+  private List<Integer> firedAt(EventWindow<Trade> window, int events) {
+    List<Integer> fired = new ArrayList<>();
+    for (int id = 1; id <= events; id++) {
+      if (window.append(this.events.trade(id, id)) != null) {
+        fired.add(id);
+      }
+    }
+    return fired;
   }
 
   private static List<Long> ids(Window<Trade> window) {

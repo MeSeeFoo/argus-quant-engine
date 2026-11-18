@@ -28,6 +28,8 @@ class DomainAllocationTest {
   private final TestEvents events = new TestEvents();
   private final EventWindow<Trade> sliding =
       EventWindow.ofTrades("trades", WindowDefinition.sliding(100));
+  private final EventWindow<Trade> slidingBy10 =
+      EventWindow.ofTrades("trades", WindowDefinition.sliding(100, 10));
   private final EventWindow<Trade> tumbling =
       EventWindow.ofTrades("trades", WindowDefinition.tumbling(50));
   private final EventWindow<BestBidAsk> quotes =
@@ -72,7 +74,10 @@ class DomainAllocationTest {
       }
       sum += gaps.onMessage(1, id);
       Trade trade = events.trade(id, id);
-      sum += read(sliding.append(trade)) + read(tumbling.append(trade));
+      sum +=
+          read(sliding.append(trade))
+              + read(slidingBy10.append(trade))
+              + read(tumbling.append(trade));
       Window<BestBidAsk> firedQuotes = quotes.append(events.bestBidAsk(id, id));
       if (firedQuotes != null) {
         fired++;

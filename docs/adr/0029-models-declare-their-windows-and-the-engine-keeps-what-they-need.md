@@ -60,13 +60,13 @@ Each window keeps its own copies of its events, in objects it allocates once, wh
 ### Windows by number of events
 
 - Each window keeps **its own copies** of its events, so it does not depend on the ring or on any other window.
-- **Sliding:** the last N events. **Tumbling:** slices of N events that do not overlap; a model reads the last closed one.
+- **Sliding:** the last N events, firing once full and then every `slide` events, from 1 (every event) to N. **Tumbling:** slices of N events that do not overlap; a model reads the last closed one.
 - Windows by time are left for when a model needs them; they will need their own sizing rule, since how many events fit in a minute depends on the market.
 - Events stay in arrival order and are never reordered, which keeps a replay identical to the original run. A window's "now" is the latest `exchangeTimestamp` of its input and never goes backwards.
 
 ### When a model is evaluated
 
-This amends [0017](0017-multi-instrument-models-and-event-time.md), which evaluates a deployment on every update of any of its inputs. **A deployment is evaluated when one of its windows fires:** a sliding window on every event, a tumbling window when a slice closes. Evaluating on every update is a sliding window of one event. The deployment's other inputs are read as they are at that moment, as 0017 describes.
+This amends [0017](0017-multi-instrument-models-and-event-time.md), which evaluates a deployment on every update of any of its inputs. **A deployment is evaluated when one of its windows fires:** a sliding window every `slide` events (every event by default), a tumbling window when a slice closes. Evaluating on every update is a sliding window of one event. The deployment's other inputs are read as they are at that moment, as 0017 describes.
 
 ### Models run on the evaluator thread
 
