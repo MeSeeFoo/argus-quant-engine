@@ -89,7 +89,7 @@
         <jacoco-maven-plugin.version>0.8.16</jacoco-maven-plugin.version>
         <error-prone.version>2.52.0</error-prone.version>
         <nullaway.version>0.14.3</nullaway.version>
-        <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
+        <sonar-maven-plugin.version>5.9.0.7382</sonar-maven-plugin.version>
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
         <spotless-maven-plugin.version>3.11.0</spotless-maven-plugin.version>
         <!-- 1.37.0 is not yet supported by Spotless 3.10.x -->
